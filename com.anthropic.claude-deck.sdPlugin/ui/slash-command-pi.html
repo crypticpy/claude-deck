@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Slash Command Settings</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 12px;
+            background-color: #2d2d2d;
+            color: #d4d4d4;
+            padding: 12px;
+            margin: 0;
+        }
+        .sdpi-item {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 12px;
+        }
+        .sdpi-item-label {
+            font-weight: 500;
+            margin-bottom: 4px;
+            color: #999;
+        }
+        .sdpi-item-value {
+            display: flex;
+        }
+        input, select {
+            background: #3c3c3c;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #d4d4d4;
+            padding: 6px 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #0078d4;
+        }
+        .preset-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 8px;
+        }
+        .preset-btn {
+            background: #3c3c3c;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #d4d4d4;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .preset-btn:hover {
+            background: #4c4c4c;
+        }
+    </style>
+</head>
+<body>
+    <div class="sdpi-wrapper">
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Slash Command</div>
+            <div class="sdpi-item-value">
+                <input type="text" id="command" placeholder="/help" />
+            </div>
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Button Label</div>
+            <div class="sdpi-item-value">
+                <input type="text" id="label" placeholder="Help" />
+            </div>
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Quick Presets</div>
+            <div class="preset-buttons">
+                <button class="preset-btn" data-cmd="/help" data-label="Help">Help</button>
+                <button class="preset-btn" data-cmd="/commit" data-label="Commit">Commit</button>
+                <button class="preset-btn" data-cmd="/clear" data-label="Clear">Clear</button>
+                <button class="preset-btn" data-cmd="/compact" data-label="Compact">Compact</button>
+                <button class="preset-btn" data-cmd="/config" data-label="Config">Config</button>
+                <button class="preset-btn" data-cmd="/doctor" data-label="Doctor">Doctor</button>
+                <button class="preset-btn" data-cmd="/init" data-label="Init">Init</button>
+                <button class="preset-btn" data-cmd="/review" data-label="Review">Review</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let uuid = null;
+        let actionInfo = {};
+
+        function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo, inActionInfo) {
+            uuid = inPluginUUID;
+            actionInfo = JSON.parse(inActionInfo);
+
+            websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+
+            websocket.onopen = function() {
+                const register = {
+                    event: inRegisterEvent,
+                    uuid: inPluginUUID
+                };
+                websocket.send(JSON.stringify(register));
+
+                // Request settings
+                const getSettings = {
+                    event: "getSettings",
+                    context: uuid
+                };
+                websocket.send(JSON.stringify(getSettings));
+            };
+
+            websocket.onmessage = function(evt) {
+                const data = JSON.parse(evt.data);
+                if (data.event === "didReceiveSettings") {
+                    const settings = data.payload.settings;
+                    document.getElementById("command").value = settings.command || "/help";
+                    document.getElementById("label").value = settings.label || "Help";
+                }
+            };
+        }
+
+        function saveSettings() {
+            const settings = {
+                command: document.getElementById("command").value || "/help",
+                label: document.getElementById("label").value || "Help"
+            };
+
+            if (websocket) {
+                const setSettings = {
+                    event: "setSettings",
+                    context: uuid,
+                    payload: settings
+                };
+                websocket.send(JSON.stringify(setSettings));
+            }
+        }
+
+        document.getElementById("command").addEventListener("change", saveSettings);
+        document.getElementById("label").addEventListener("change", saveSettings);
+
+        document.querySelectorAll(".preset-btn").forEach(btn => {
+            btn.addEventListener("click", function() {
+                document.getElementById("command").value = this.dataset.cmd;
+                document.getElementById("label").value = this.dataset.label;
+                saveSettings();
+            });
+        });
+    </script>
+</body>
+</html>

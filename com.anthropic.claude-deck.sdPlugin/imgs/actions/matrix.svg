@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#000000" rx="12"/>
+  <text x="20" y="30" font-family="monospace" font-size="10" fill="#22c55e" opacity="0.8">ア</text>
+  <text x="40" y="50" font-family="monospace" font-size="10" fill="#22c55e" opacity="0.6">イ</text>
+  <text x="60" y="70" font-family="monospace" font-size="10" fill="#4ade80">ウ</text>
+  <text x="80" y="40" font-family="monospace" font-size="10" fill="#22c55e" opacity="0.7">エ</text>
+  <text x="100" y="60" font-family="monospace" font-size="10" fill="#22c55e" opacity="0.5">オ</text>
+  <text x="50" y="90" font-family="monospace" font-size="10" fill="#4ade80">カ</text>
+  <text x="90" y="85" font-family="monospace" font-size="10" fill="#22c55e" opacity="0.6">キ</text>
+  <text x="72" y="125" font-family="monospace" font-size="10" fill="#22c55e" text-anchor="middle">MATRIX</text>
+</svg>

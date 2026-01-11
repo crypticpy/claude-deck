@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#0f172a" rx="20"/>
+  <circle cx="72" cy="65" r="35" fill="#d97706" opacity="0.3"/>
+  <circle cx="72" cy="65" r="28" fill="#d97706"/>
+  <path d="M60 58 Q72 48 84 58" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="62" cy="62" r="4" fill="#0f172a"/>
+  <circle cx="82" cy="62" r="4" fill="#0f172a"/>
+  <path d="M62 72 Q72 80 82 72" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>
+  <text x="72" y="118" font-family="system-ui, sans-serif" font-size="14" fill="#d97706" text-anchor="middle" font-weight="bold">CLAUDE</text>
+</svg>

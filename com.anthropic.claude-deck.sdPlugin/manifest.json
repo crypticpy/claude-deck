@@ -1,0 +1,494 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "UUID": "com.anthropic.claude-deck",
+  "Name": "Claude Deck",
+  "Author": "Anthropic Community",
+  "Description": "Control Claude Code CLI from your Stream Deck - approve actions, switch modes, trigger commands",
+  "Version": "0.1.0.0",
+  "SDKVersion": 3,
+  "Software": {
+    "MinimumVersion": "6.6"
+  },
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "13"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Nodejs": {
+    "Version": "20",
+    "Debug": "enabled"
+  },
+  "CodePath": "bin/plugin.js",
+  "Icon": "imgs/plugin-icon",
+  "Category": "Claude Code",
+  "CategoryIcon": "imgs/category-icon",
+  "Actions": [
+    {
+      "UUID": "com.anthropic.claude-deck.approve",
+      "Name": "Approve",
+      "Icon": "imgs/actions/approve",
+      "Tooltip": "Approve the pending Claude Code action",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/approve",
+          "Title": "Approve",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "12"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.reject",
+      "Name": "Reject",
+      "Icon": "imgs/actions/reject",
+      "Tooltip": "Reject the pending Claude Code action",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/reject",
+          "Title": "Reject",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "12"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.interrupt",
+      "Name": "Interrupt",
+      "Icon": "imgs/actions/interrupt",
+      "Tooltip": "Interrupt/cancel current Claude Code operation",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/interrupt",
+          "Title": "Stop",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "12"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.yolo-mode",
+      "Name": "YOLO Mode",
+      "Icon": "imgs/actions/yolo",
+      "Tooltip": "Toggle auto-approve mode (bypass all permissions)",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/yolo-off",
+          "Title": "YOLO",
+          "TitleColor": "#888888",
+          "FontSize": "10"
+        },
+        {
+          "Image": "imgs/actions/yolo-on",
+          "Title": "YOLO",
+          "TitleColor": "#00FF00",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.plan-mode",
+      "Name": "Plan Mode",
+      "Icon": "imgs/actions/plan",
+      "Tooltip": "Toggle plan mode (read-only analysis)",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/plan-off",
+          "Title": "Plan",
+          "TitleColor": "#888888",
+          "FontSize": "10"
+        },
+        {
+          "Image": "imgs/actions/plan-on",
+          "Title": "Plan",
+          "TitleColor": "#00BFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.switch-model",
+      "Name": "Switch Model",
+      "Icon": "imgs/actions/model",
+      "Tooltip": "Cycle through available models (Sonnet/Opus)",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/model-sonnet",
+          "Title": "Sonnet",
+          "TitleColor": "#FF9500",
+          "FontSize": "10"
+        },
+        {
+          "Image": "imgs/actions/model-opus",
+          "Title": "Opus",
+          "TitleColor": "#AF52DE",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.new-session",
+      "Name": "New Session",
+      "Icon": "imgs/actions/new-session",
+      "Tooltip": "Start a new Claude Code session",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/new-session",
+          "Title": "New",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "12"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.continue-session",
+      "Name": "Continue Session",
+      "Icon": "imgs/actions/continue",
+      "Tooltip": "Continue the most recent Claude Code session",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/continue",
+          "Title": "Cont",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "12"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.slash-commit",
+      "Name": "Commit",
+      "Icon": "imgs/actions/commit",
+      "Tooltip": "Run /commit to create a git commit",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/commit",
+          "Title": "Commit",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.slash-review",
+      "Name": "Review PR",
+      "Icon": "imgs/actions/review",
+      "Tooltip": "Run /review to review code changes",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/review",
+          "Title": "Review",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.toggle-thinking",
+      "Name": "Extended Thinking",
+      "Icon": "imgs/actions/thinking",
+      "Tooltip": "Toggle extended thinking mode",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/thinking-off",
+          "Title": "Think",
+          "TitleColor": "#888888",
+          "FontSize": "10"
+        },
+        {
+          "Image": "imgs/actions/thinking-on",
+          "Title": "Think",
+          "TitleColor": "#FFD700",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.status",
+      "Name": "Status Display",
+      "Icon": "imgs/actions/status",
+      "Tooltip": "Shows current Claude Code session status",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/status-idle",
+          "Title": "Idle",
+          "TitleColor": "#888888",
+          "FontSize": "10"
+        },
+        {
+          "Image": "imgs/actions/status-working",
+          "Title": "Working",
+          "TitleColor": "#00FF00",
+          "FontSize": "10"
+        },
+        {
+          "Image": "imgs/actions/status-waiting",
+          "Title": "Waiting",
+          "TitleColor": "#FFD700",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.token-display",
+      "Name": "Token Counter",
+      "Icon": "imgs/actions/tokens",
+      "Tooltip": "Shows input/output token usage for current session",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/tokens",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.model-display",
+      "Name": "Model Badge",
+      "Icon": "imgs/actions/model-badge",
+      "Tooltip": "Shows current model - tap to switch",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/model-badge",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.mode-display",
+      "Name": "Mode Badge",
+      "Icon": "imgs/actions/mode-badge",
+      "Tooltip": "Shows current permission mode - tap to cycle",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/mode-badge",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.activity-display",
+      "Name": "Activity Monitor",
+      "Icon": "imgs/actions/activity",
+      "Tooltip": "Shows live activity status and tool calls",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/activity",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.cost-display",
+      "Name": "Cost Tracker",
+      "Icon": "imgs/actions/cost",
+      "Tooltip": "Shows estimated API cost for current session",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/cost",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.context-bar",
+      "Name": "Context Bar",
+      "Icon": "imgs/actions/context-bar",
+      "Tooltip": "Shows context window usage as a progress bar",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/context-bar",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.context-percent",
+      "Name": "Context %",
+      "Icon": "imgs/actions/context-percent",
+      "Tooltip": "Shows context window usage as a percentage",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/context-percent",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.session-timer",
+      "Name": "Session Timer",
+      "Icon": "imgs/actions/timer",
+      "Tooltip": "Shows how long the current session has been running",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/timer",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.brain-search",
+      "Name": "Brain Search",
+      "Icon": "imgs/actions/brain",
+      "Tooltip": "Search context-layer brain for lessons and insights",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/brain",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.mistake-log",
+      "Name": "Log Mistake",
+      "Icon": "imgs/actions/mistake",
+      "Tooltip": "Log a mistake to context-layer brain",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/mistake",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.git-status",
+      "Name": "Git Status",
+      "Icon": "imgs/actions/git",
+      "Tooltip": "Shows current git branch and changes",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/git",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.slash-command",
+      "Name": "Slash Command",
+      "Icon": "imgs/actions/slash",
+      "Tooltip": "Run any slash command",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/slash",
+          "Title": "",
+          "TitleColor": "#FFFFFF",
+          "FontSize": "10"
+        }
+      ],
+      "PropertyInspectorPath": "ui/slash-command-pi.html"
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.tool-breakdown",
+      "Name": "Tool Breakdown",
+      "Icon": "imgs/actions/tools-pie",
+      "Tooltip": "Pie chart showing tool usage distribution",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/tools-pie", "Title": "" }]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.claude-mood",
+      "Name": "Claude Mood",
+      "Icon": "imgs/actions/mood",
+      "Tooltip": "Animated face showing Claude's current state",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/mood", "Title": "" }]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.idle-detector",
+      "Name": "Idle Detector",
+      "Icon": "imgs/actions/idle",
+      "Tooltip": "Shows when Claude is waiting for input",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/idle", "Title": "" }]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.clipboard-send",
+      "Name": "Clipboard to Claude",
+      "Icon": "imgs/actions/clipboard",
+      "Tooltip": "Send clipboard contents to Claude",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/clipboard", "Title": "" }]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.screenshot-claude",
+      "Name": "Screenshot to Claude",
+      "Icon": "imgs/actions/screenshot",
+      "Tooltip": "Capture screenshot and send to Claude for analysis",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/screenshot", "Title": "" }]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.matrix-rain",
+      "Name": "Matrix Rain",
+      "Icon": "imgs/actions/matrix",
+      "Tooltip": "Animated matrix effect when Claude is working",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/matrix", "Title": "" }]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.session-export",
+      "Name": "Export Session",
+      "Icon": "imgs/actions/export",
+      "Tooltip": "Export current session transcript",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/export", "Title": "" }]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.prompt-preset",
+      "Name": "Prompt Preset",
+      "Icon": "imgs/actions/preset",
+      "Tooltip": "Configurable saved prompt",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/preset", "Title": "" }],
+      "PropertyInspectorPath": "ui/prompt-preset-pi.html"
+    }
+  ]
+}

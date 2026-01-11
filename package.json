@@ -1,0 +1,46 @@
+{
+  "name": "claude-deck",
+  "version": "0.1.0",
+  "description": "Stream Deck plugin to control Claude Code CLI - 32 actions for permissions, models, context tracking, and more",
+  "author": "Anthropic Community",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/claude-deck.git"
+  },
+  "bugs": {
+    "url": "https://github.com/anthropics/claude-deck/issues"
+  },
+  "homepage": "https://github.com/anthropics/claude-deck#readme",
+  "keywords": [
+    "stream-deck",
+    "elgato",
+    "claude",
+    "claude-code",
+    "ai",
+    "cli",
+    "anthropic"
+  ],
+  "type": "module",
+  "main": "dist/plugin.js",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w",
+    "dev": "npm run watch",
+    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@elgato/cli": "^1.6.0",
+    "@elgato/streamdeck": "^2.0.1",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/node": "^20.11.0",
+    "eslint": "^8.56.0",
+    "rollup": "^4.9.6",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

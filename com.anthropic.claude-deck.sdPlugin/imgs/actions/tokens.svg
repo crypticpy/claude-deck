@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#0f172a" rx="16"/>
+  <circle cx="72" cy="72" r="45" fill="#06b6d4" opacity="0.2"/>
+  <text x="72" y="60" font-family="system-ui, sans-serif" font-size="24" fill="#06b6d4" text-anchor="middle" font-weight="bold">123K</text>
+  <rect x="40" y="75" width="64" height="8" rx="4" fill="#1e293b"/>
+  <rect x="40" y="75" width="40" height="8" rx="4" fill="#06b6d4"/>
+  <text x="72" y="105" font-family="system-ui, sans-serif" font-size="12" fill="#64748b" text-anchor="middle">TOKENS</text>
+</svg>

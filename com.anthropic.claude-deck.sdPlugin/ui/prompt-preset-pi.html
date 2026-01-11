@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Prompt Preset</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; font-size: 12px; background: #2d2d2d; color: #d4d4d4; padding: 12px; margin: 0; }
+        .item { margin-bottom: 12px; }
+        .label { font-weight: 500; margin-bottom: 4px; color: #999; }
+        input, textarea, select { background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; padding: 6px 8px; width: 100%; box-sizing: border-box; }
+        textarea { min-height: 80px; resize: vertical; }
+        input:focus, textarea:focus { outline: none; border-color: #0078d4; }
+        .colors { display: flex; gap: 6px; margin-top: 8px; }
+        .color-btn { width: 24px; height: 24px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; }
+        .color-btn.selected { border-color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="item">
+        <div class="label">Button Label</div>
+        <input type="text" id="label" placeholder="My Prompt"/>
+    </div>
+    <div class="item">
+        <div class="label">Prompt Text</div>
+        <textarea id="prompt" placeholder="Enter the prompt to send..."></textarea>
+    </div>
+    <div class="item">
+        <div class="label">Color</div>
+        <div class="colors">
+            <div class="color-btn" style="background:#3b82f6" data-color="#3b82f6"></div>
+            <div class="color-btn" style="background:#22c55e" data-color="#22c55e"></div>
+            <div class="color-btn" style="background:#f59e0b" data-color="#f59e0b"></div>
+            <div class="color-btn" style="background:#ef4444" data-color="#ef4444"></div>
+            <div class="color-btn" style="background:#8b5cf6" data-color="#8b5cf6"></div>
+            <div class="color-btn" style="background:#ec4899" data-color="#ec4899"></div>
+        </div>
+    </div>
+    <script>
+        let ws, uuid, settings = { prompt: "", label: "Preset", color: "#3b82f6" };
+        function connectElgatoStreamDeckSocket(port, pluginUUID, registerEvent, info, actionInfo) {
+            uuid = pluginUUID;
+            const ai = JSON.parse(actionInfo);
+            settings = ai.payload?.settings || settings;
+            ws = new WebSocket("ws://127.0.0.1:" + port);
+            ws.onopen = () => { ws.send(JSON.stringify({ event: registerEvent, uuid: pluginUUID })); updateUI(); };
+            ws.onmessage = (e) => { const d = JSON.parse(e.data); if (d.event === "didReceiveSettings") { settings = d.payload.settings || settings; updateUI(); } };
+        }
+        function updateUI() {
+            document.getElementById("label").value = settings.label || "";
+            document.getElementById("prompt").value = settings.prompt || "";
+            document.querySelectorAll(".color-btn").forEach(b => b.classList.toggle("selected", b.dataset.color === settings.color));
+        }
+        function save() {
+            settings.label = document.getElementById("label").value;
+            settings.prompt = document.getElementById("prompt").value;
+            ws?.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
+        }
+        document.getElementById("label").addEventListener("change", save);
+        document.getElementById("prompt").addEventListener("change", save);
+        document.querySelectorAll(".color-btn").forEach(b => b.addEventListener("click", () => { settings.color = b.dataset.color; save(); updateUI(); }));
+    </script>
+</body>
+</html>

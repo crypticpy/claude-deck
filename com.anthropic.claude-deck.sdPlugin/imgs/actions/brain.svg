@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#0f172a" rx="12"/>
+  <ellipse cx="72" cy="65" rx="38" ry="32" fill="#a855f7" opacity="0.2"/>
+  <path d="M45 65 Q45 40 72 40 Q99 40 99 65 Q99 90 72 95 Q45 90 45 65" fill="none" stroke="#a855f7" stroke-width="3"/>
+  <path d="M72 40 Q72 65 72 95" stroke="#a855f7" stroke-width="2" opacity="0.5"/>
+  <path d="M52 52 Q65 58 52 68" stroke="#a855f7" stroke-width="2" fill="none"/>
+  <path d="M92 52 Q79 58 92 68" stroke="#a855f7" stroke-width="2" fill="none"/>
+  <circle cx="40" cy="45" r="4" fill="#a855f7" opacity="0.6"/>
+  <circle cx="104" cy="45" r="3" fill="#a855f7" opacity="0.4"/>
+  <circle cx="35" cy="75" r="3" fill="#a855f7" opacity="0.5"/>
+  <text x="72" y="125" font-family="system-ui, sans-serif" font-size="11" fill="#a855f7" text-anchor="middle">BRAIN</text>
+</svg>

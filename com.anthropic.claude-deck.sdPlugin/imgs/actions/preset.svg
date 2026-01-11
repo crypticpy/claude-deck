@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#0f172a" rx="12"/>
+  <path d="M32 40 L112 40 Q118 40 118 46 L118 82 Q118 88 112 88 L82 88 L72 100 L62 88 L32 88 Q26 88 26 82 L26 46 Q26 40 32 40" fill="#3b82f6" opacity="0.2"/>
+  <path d="M32 40 L112 40 Q118 40 118 46 L118 82 Q118 88 112 88 L82 88 L72 100 L62 88 L32 88 Q26 88 26 82 L26 46 Q26 40 32 40" fill="none" stroke="#3b82f6" stroke-width="3"/>
+  <line x1="42" y1="55" x2="102" y2="55" stroke="#3b82f6" stroke-width="2" opacity="0.5"/>
+  <line x1="42" y1="70" x2="90" y2="70" stroke="#3b82f6" stroke-width="2" opacity="0.5"/>
+  <text x="72" y="125" font-family="system-ui" font-size="11" fill="#3b82f6" text-anchor="middle">PRESET</text>
+</svg>

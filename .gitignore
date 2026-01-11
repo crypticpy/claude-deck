@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+com.anthropic.claude-deck.sdPlugin/bin/
+com.anthropic.claude-deck.sdPlugin/logs/
+*.streamDeckPlugin
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# Claude Code project-specific data (user data, not code)
+.claude/
+
+# Test outputs
+coverage/
+.nyc_output/
+
+# OS files
+Thumbs.db
+*.bak
+*~
+
+# Temporary files
+tmp/
+temp/
+*.tmp

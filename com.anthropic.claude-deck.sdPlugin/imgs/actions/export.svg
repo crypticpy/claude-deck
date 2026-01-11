@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#0f172a" rx="12"/>
+  <path d="M48 35 L82 35 L98 51 L98 100 L48 100 Z" fill="#10b981" opacity="0.2"/>
+  <path d="M48 35 L82 35 L98 51 L98 100 L48 100 Z" fill="none" stroke="#10b981" stroke-width="3"/>
+  <path d="M82 35 L82 51 L98 51" fill="none" stroke="#10b981" stroke-width="3"/>
+  <path d="M72 58 L72 85 M60 75 L72 87 L84 75" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="72" y="120" font-family="system-ui" font-size="11" fill="#10b981" text-anchor="middle">EXPORT</text>
+</svg>
