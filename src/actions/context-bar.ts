@@ -60,9 +60,11 @@ export class ContextBarAction extends SingletonAction {
   }
 
   private createBarSvg(state: ClaudeState): string {
-    const percent = state.contextPercent || 0;
+    // Use 154k as threshold (auto-compaction point) not 200k (full context)
+    const COMPACTION_THRESHOLD = 154000;
     const used = state.contextUsed || state.tokens?.input || 0;
-    const total = state.contextSize || 200000;
+    const total = COMPACTION_THRESHOLD;
+    const percent = Math.min(100, Math.round((used / total) * 100));
 
     const barColor = this.getBarColor(percent);
     const barWidth = Math.min(100, percent); // Cap at 100%

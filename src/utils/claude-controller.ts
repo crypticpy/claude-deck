@@ -436,6 +436,15 @@ export class ClaudeController extends EventEmitter {
   }
 
   /**
+   * Set the permission mode in state (for local tracking)
+   */
+  async setPermissionMode(mode: ClaudeState["permissionMode"]): Promise<void> {
+    const state = await this.refreshState();
+    state.permissionMode = mode;
+    await this.writeState(state);
+  }
+
+  /**
    * Open a command in a new terminal window
    * Supports: Kitty, Ghostty, iTerm, Terminal.app, WezTerm, Alacritty
    */

@@ -116,6 +116,14 @@
       ]
     },
     {
+      "UUID": "com.anthropic.claude-deck.mode-cycle",
+      "Name": "Mode Cycle",
+      "Icon": "imgs/actions/mode-cycle",
+      "Tooltip": "Cycle through permission modes (Shift+Tab)",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/mode-cycle", "Title": "" }]
+    },
+    {
       "UUID": "com.anthropic.claude-deck.switch-model",
       "Name": "Switch Model",
       "Icon": "imgs/actions/model",

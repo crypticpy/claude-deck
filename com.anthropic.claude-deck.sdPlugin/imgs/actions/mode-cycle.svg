@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#0f172a" rx="12"/>
+  <circle cx="72" cy="60" r="35" fill="#6b7280" opacity="0.2"/>
+  <circle cx="72" cy="60" r="35" fill="none" stroke="#6b7280" stroke-width="3"/>
+  <circle cx="72" cy="60" r="8" fill="#6b7280"/>
+  <!-- Cycle arrows -->
+  <path d="M50 60 A22 22 0 0 1 72 38" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+  <path d="M68 40 L72 38 L74 42" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M94 60 A22 22 0 0 1 72 82" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+  <path d="M76 80 L72 82 L70 78" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="72" y="118" font-family="system-ui" font-size="12" fill="#6b7280" text-anchor="middle">MODE</text>
+</svg>
