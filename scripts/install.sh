@@ -146,7 +146,8 @@ log_success "Hook handler installed to $HOOKS_DIR"
 # ============================================================================
 log_step "Creating initial state files..."
 
-cat > "$CLAUDE_DECK_DIR/state.json" << 'EOF'
+if [ ! -f "$CLAUDE_DECK_DIR/state.json" ]; then
+    cat > "$CLAUDE_DECK_DIR/state.json" << 'EOF'
 {
   "sessionActive": false,
   "currentModel": "sonnet",
@@ -163,8 +164,11 @@ cat > "$CLAUDE_DECK_DIR/state.json" << 'EOF'
   "lastUpdated": ""
 }
 EOF
-chmod 600 "$CLAUDE_DECK_DIR/state.json"
-log_success "State file created"
+    chmod 600 "$CLAUDE_DECK_DIR/state.json"
+    log_success "State file created"
+else
+    log_info "State file already exists, preserving"
+fi
 
 # ============================================================================
 # Create Default Config
@@ -300,9 +304,19 @@ HOOKS_CONFIG=$(cat << EOF
 EOF
 )
 
-# Merge hooks — Claude Deck entries replace existing ones for the same event types.
-# User hooks for other event types are preserved.
-UPDATED_SETTINGS=$(echo "$SETTINGS" | jq --argjson hooks "$HOOKS_CONFIG" '.hooks = ((.hooks // {}) * $hooks)')
+# Merge hooks — for each hook type, remove any existing claude-deck entries
+# (identified by hook-handler.js in the command), then append our new ones.
+# User hooks for the same event types are preserved.
+UPDATED_SETTINGS=$(echo "$SETTINGS" | jq --argjson hooks "$HOOKS_CONFIG" '
+  reduce ($hooks | keys[]) as $key (
+    .;
+    .hooks[$key] = (
+      ((.hooks[$key] // [])
+        | map(select(.hooks | all(.command | contains("hook-handler.js") | not))))
+      + $hooks[$key]
+    )
+  )
+')
 echo "$UPDATED_SETTINGS" | jq '.' > "$SETTINGS_FILE"
 log_success "Claude Code hooks configured"
 
@@ -389,7 +403,7 @@ else
 }
 EOF
 )
-                UPDATED_SETTINGS=$(echo "$SETTINGS" | jq --argjson mcp "$MCP_CONFIG" '.mcpServers = ($mcp * (.mcpServers // {}))')
+                UPDATED_SETTINGS=$(echo "$SETTINGS" | jq --argjson mcp "$MCP_CONFIG" '.mcpServers = ((.mcpServers // {}) * $mcp)')
                 echo "$UPDATED_SETTINGS" | jq '.' > "$SETTINGS_FILE"
 
                 log_success "context-layer installed and configured"

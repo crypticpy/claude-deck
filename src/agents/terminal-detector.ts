@@ -239,11 +239,7 @@ export class TerminalDetector extends EventEmitter {
 
         // Reuse the app name from getFocusedTerminal() result
         // instead of calling getFrontmostAppName() again
-        const appName = terminal?.app
-          ? TERMINAL_APPS[terminal.app]
-            ? terminal.app
-            : null
-          : null;
+        const appName = terminal?.app ?? null;
         const appChanged = appName !== this.lastFocusedApp;
         this.lastFocusedApp = appName;
 

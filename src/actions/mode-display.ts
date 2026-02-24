@@ -54,11 +54,15 @@ export class ModeDisplayAction extends SingletonAction {
   }
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
-    // Cycle through modes on press
-    const success = await stateAggregator.cycleMode();
-    if (success) {
-      await ev.action.showOk();
-    } else {
+    try {
+      const success = await stateAggregator.cycleMode();
+      if (success) {
+        await ev.action.showOk();
+      } else {
+        await ev.action.showAlert();
+      }
+    } catch (error) {
+      console.error("Mode cycle failed:", error);
       await ev.action.showAlert();
     }
   }

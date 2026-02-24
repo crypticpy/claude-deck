@@ -1,14 +1,19 @@
-import streamDeck, { action, SingletonAction } from "@elgato/streamdeck";
+import streamDeck, {
+  SingletonAction,
+  type KeyDownEvent,
+} from "@elgato/streamdeck";
 import { claudeAgent } from "../agents/index.js";
 
-@action({ UUID: "com.anthropic.claude-deck.slash-commit" })
 export class SlashCommitAction extends SingletonAction {
-  async onKeyDown(): Promise<void> {
+  manifestId = "com.anthropic.claude-deck.slash-commit";
+
+  override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     try {
       await claudeAgent.sendText("/commit");
-      streamDeck.logger.info("Sent /commit command");
+      await ev.action.showOk();
     } catch (error) {
       streamDeck.logger.error("Failed to send /commit:", error);
+      await ev.action.showAlert();
     }
   }
 }

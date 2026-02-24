@@ -52,11 +52,15 @@ export class ModelDisplayAction extends SingletonAction {
   }
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
-    // Cycle to next model on press
-    const success = await stateAggregator.cycleModel();
-    if (success) {
-      await ev.action.showOk();
-    } else {
+    try {
+      const success = await stateAggregator.cycleModel();
+      if (success) {
+        await ev.action.showOk();
+      } else {
+        await ev.action.showAlert();
+      }
+    } catch (error) {
+      console.error("Model switch failed:", error);
       await ev.action.showAlert();
     }
   }

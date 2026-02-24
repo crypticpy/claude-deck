@@ -30,7 +30,10 @@ export class ActiveAgentDisplayAction extends SingletonAction {
 
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   private stateHandler?: (state: AggregatedState) => void;
-  private activeChangeHandler?: (agentId: string | null) => void;
+  private activeChangeHandler?: (
+    agentId: string | null,
+    previousId: string | null,
+  ) => void;
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);

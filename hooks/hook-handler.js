@@ -37,6 +37,15 @@ const STATE_PERMS = 0o600;
 const LOCK_FILE = STATE_FILE + ".lock";
 const LOCK_TIMEOUT_MS = 2000;
 
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function acquireLock() {
   const start = Date.now();
   while (Date.now() - start < LOCK_TIMEOUT_MS) {
@@ -44,7 +53,16 @@ function acquireLock() {
       fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: "wx" });
       return true;
     } catch {
-      // Lock exists, wait briefly and retry
+      // Check for stale lock
+      try {
+        const lockPid = parseInt(fs.readFileSync(LOCK_FILE, "utf-8"), 10);
+        if (lockPid && !isProcessAlive(lockPid)) {
+          fs.unlinkSync(LOCK_FILE);
+          continue;
+        }
+      } catch {
+        /* ignore */
+      }
       const wait = Date.now();
       while (Date.now() - wait < 10) {
         /* spin */
@@ -307,6 +325,11 @@ async function main() {
     // For all other hook types, output nothing to stdout.
   } catch (e) {
     process.stderr.write(`[claude-deck] Hook handler error: ${e.message}\n`);
+    // PreToolUse MUST always emit valid JSON, even on error,
+    // otherwise Claude Code blocks the tool invocation.
+    if (hookType === "PreToolUse") {
+      process.stdout.write("{}");
+    }
     process.exit(1);
   }
 }

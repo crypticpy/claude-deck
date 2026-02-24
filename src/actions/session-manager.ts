@@ -12,6 +12,7 @@ import { mkdir, readdir, readFile, writeFile, unlink } from "node:fs/promises";
 import type { JsonObject, JsonValue } from "@elgato/utils";
 import { stateAggregator } from "../agents/state-aggregator.js";
 import type { AgentState, SpawnOptions } from "../agents/base-agent.js";
+import { escapeXml } from "../utils/svg-utils.js";
 
 /**
  * Structure for a saved session profile
@@ -80,7 +81,10 @@ export class SessionManagerAction extends SingletonAction {
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
-    this.settingsById.set(ev.action.id, (ev.payload.settings as SessionManagerSettings) ?? {});
+    this.settingsById.set(
+      ev.action.id,
+      (ev.payload.settings as SessionManagerSettings) ?? {},
+    );
 
     // Ensure sessions directory exists
     await mkdir(this.sessionsDir, { recursive: true });
@@ -93,8 +97,13 @@ export class SessionManagerAction extends SingletonAction {
     this.settingsById.delete(ev.action.id);
   }
 
-  override async onDidReceiveSettings(ev: DidReceiveSettingsEvent): Promise<void> {
-    this.settingsById.set(ev.action.id, (ev.payload.settings as SessionManagerSettings) ?? {});
+  override async onDidReceiveSettings(
+    ev: DidReceiveSettingsEvent,
+  ): Promise<void> {
+    this.settingsById.set(
+      ev.action.id,
+      (ev.payload.settings as SessionManagerSettings) ?? {},
+    );
     await this.updateDisplay(ev.action);
   }
 
@@ -103,7 +112,7 @@ export class SessionManagerAction extends SingletonAction {
   }
 
   override async onSendToPlugin(
-    ev: SendToPluginEvent<SessionManagerPiMessage, SessionManagerSettings>
+    ev: SendToPluginEvent<SessionManagerPiMessage, SessionManagerSettings>,
   ): Promise<void> {
     const payload = ev.payload as SessionManagerPiMessage;
 
@@ -131,7 +140,9 @@ export class SessionManagerAction extends SingletonAction {
         await ev.action.showOk();
       } else if (mode === "restore") {
         if (!settings.profileName) {
-          streamDeck.logger.warn("SessionManager: No profile selected for restore");
+          streamDeck.logger.warn(
+            "SessionManager: No profile selected for restore",
+          );
           await ev.action.showAlert();
           return;
         }
@@ -154,7 +165,10 @@ export class SessionManagerAction extends SingletonAction {
           const profileName = this.generateProfileName();
           await this.saveCurrentSession(profileName);
           // Update settings with the new profile name
-          await ev.action.setSettings({ ...settings, profileName } as JsonObject);
+          await ev.action.setSettings({
+            ...settings,
+            profileName,
+          } as JsonObject);
           await ev.action.showOk();
         }
       }
@@ -180,7 +194,13 @@ export class SessionManagerAction extends SingletonAction {
     for (const [agentId, agentState] of aggregatedState.agents) {
       // Only save agents that are not disconnected
       if (agentState.status !== "disconnected") {
-        savedAgents.push(this.agentStateToSaved(agentId, agentState, aggregatedState.activeAgentId));
+        savedAgents.push(
+          this.agentStateToSaved(
+            agentId,
+            agentState,
+            aggregatedState.activeAgentId,
+          ),
+        );
       }
     }
 
@@ -194,7 +214,9 @@ export class SessionManagerAction extends SingletonAction {
     const filePath = this.profilePath(profileName);
     await writeFile(filePath, JSON.stringify(profile, null, 2), "utf-8");
 
-    streamDeck.logger.info(`SessionManager: Saved profile "${profileName}" with ${savedAgents.length} agents`);
+    streamDeck.logger.info(
+      `SessionManager: Saved profile "${profileName}" with ${savedAgents.length} agents`,
+    );
   }
 
   /**
@@ -206,21 +228,27 @@ export class SessionManagerAction extends SingletonAction {
       throw new Error(`Profile "${profileName}" not found`);
     }
 
-    streamDeck.logger.info(`SessionManager: Restoring profile "${profileName}" with ${profile.agents.length} agents`);
+    streamDeck.logger.info(
+      `SessionManager: Restoring profile "${profileName}" with ${profile.agents.length} agents`,
+    );
 
     // Restore each agent
     for (const savedAgent of profile.agents) {
       try {
         const agent = stateAggregator.getAgent(savedAgent.agentId);
         if (!agent) {
-          streamDeck.logger.warn(`SessionManager: Agent "${savedAgent.agentId}" not registered, skipping`);
+          streamDeck.logger.warn(
+            `SessionManager: Agent "${savedAgent.agentId}" not registered, skipping`,
+          );
           continue;
         }
 
         // Check if agent is already running
         const isRunning = await agent.isRunning();
         if (isRunning) {
-          streamDeck.logger.info(`SessionManager: Agent "${savedAgent.agentId}" already running, skipping spawn`);
+          streamDeck.logger.info(
+            `SessionManager: Agent "${savedAgent.agentId}" already running, skipping spawn`,
+          );
           continue;
         }
 
@@ -233,16 +261,22 @@ export class SessionManagerAction extends SingletonAction {
 
         // Set permission mode if saved
         if (savedAgent.mode) {
-          spawnOptions.permissionMode = savedAgent.mode as SpawnOptions["permissionMode"];
+          spawnOptions.permissionMode =
+            savedAgent.mode as SpawnOptions["permissionMode"];
         }
 
-        streamDeck.logger.info(`SessionManager: Spawning agent "${savedAgent.agentId}" in ${savedAgent.cwd}`);
+        streamDeck.logger.info(
+          `SessionManager: Spawning agent "${savedAgent.agentId}" in ${savedAgent.cwd}`,
+        );
         await agent.spawnSession(spawnOptions);
 
         // Small delay between spawns to avoid terminal chaos
         await this.delay(500);
       } catch (error) {
-        streamDeck.logger.error(`SessionManager: Failed to restore agent "${savedAgent.agentId}":`, error);
+        streamDeck.logger.error(
+          `SessionManager: Failed to restore agent "${savedAgent.agentId}":`,
+          error,
+        );
       }
     }
 
@@ -258,7 +292,9 @@ export class SessionManagerAction extends SingletonAction {
   /**
    * Load a profile from disk
    */
-  private async loadProfile(profileName: string): Promise<SessionProfile | null> {
+  private async loadProfile(
+    profileName: string,
+  ): Promise<SessionProfile | null> {
     try {
       const filePath = this.profilePath(profileName);
       const content = await readFile(filePath, "utf-8");
@@ -275,19 +311,30 @@ export class SessionManagerAction extends SingletonAction {
     try {
       const filePath = this.profilePath(profileName);
       await unlink(filePath);
-      streamDeck.logger.info(`SessionManager: Deleted profile "${profileName}"`);
+      streamDeck.logger.info(
+        `SessionManager: Deleted profile "${profileName}"`,
+      );
     } catch (error) {
-      streamDeck.logger.error(`SessionManager: Failed to delete profile "${profileName}":`, error);
+      streamDeck.logger.error(
+        `SessionManager: Failed to delete profile "${profileName}":`,
+        error,
+      );
     }
   }
 
   /**
    * List all saved profiles
    */
-  private async listProfiles(): Promise<{ name: string; updatedAt: string; agentCount: number }[]> {
+  private async listProfiles(): Promise<
+    { name: string; updatedAt: string; agentCount: number }[]
+  > {
     try {
       const files = await readdir(this.sessionsDir);
-      const profiles: { name: string; updatedAt: string; agentCount: number }[] = [];
+      const profiles: {
+        name: string;
+        updatedAt: string;
+        agentCount: number;
+      }[] = [];
 
       for (const file of files) {
         if (!file.endsWith(".json")) continue;
@@ -307,7 +354,10 @@ export class SessionManagerAction extends SingletonAction {
       }
 
       // Sort by most recently updated
-      profiles.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      profiles.sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
 
       return profiles;
     } catch {
@@ -324,13 +374,17 @@ export class SessionManagerAction extends SingletonAction {
    */
   private async sendProfilesToPI(): Promise<void> {
     const profiles = await this.listProfiles();
-    await streamDeck.ui.sendToPropertyInspector({ profiles } as unknown as JsonValue);
+    await streamDeck.ui.sendToPropertyInspector({
+      profiles,
+    } as unknown as JsonValue);
   }
 
   /**
    * Update the button display
    */
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
     const settings = this.getSettings(action.id);
     const mode = settings.actionMode ?? "toggle";
     const label = settings.label || this.getModeLabel(mode);
@@ -360,13 +414,13 @@ export class SessionManagerAction extends SingletonAction {
         ${modeIcon}
 
         <!-- Profile name -->
-        <text x="72" y="95" font-family="system-ui, sans-serif" font-size="12" fill="${statusColor}" text-anchor="middle" font-weight="bold">${statusText}</text>
+        <text x="72" y="95" font-family="system-ui, sans-serif" font-size="12" fill="${statusColor}" text-anchor="middle" font-weight="bold">${escapeXml(statusText)}</text>
 
         <!-- Label -->
-        <text x="72" y="115" font-family="system-ui, sans-serif" font-size="11" fill="#64748b" text-anchor="middle">${label.toUpperCase()}</text>
+        <text x="72" y="115" font-family="system-ui, sans-serif" font-size="11" fill="#64748b" text-anchor="middle">${escapeXml(label.toUpperCase())}</text>
 
         <!-- Mode indicator -->
-        <text x="72" y="130" font-family="system-ui, sans-serif" font-size="9" fill="#475569" text-anchor="middle">${mode}</text>
+        <text x="72" y="130" font-family="system-ui, sans-serif" font-size="9" fill="#475569" text-anchor="middle">${escapeXml(mode)}</text>
       </svg>
     `;
 
@@ -397,7 +451,7 @@ export class SessionManagerAction extends SingletonAction {
   private agentStateToSaved(
     agentId: string,
     state: AgentState,
-    activeAgentId: string | null
+    activeAgentId: string | null,
   ): SavedAgentSession {
     return {
       agentId,

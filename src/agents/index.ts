@@ -98,11 +98,19 @@ export function getAvailableAgentIds(): string[] {
  */
 export async function initializeDefaultAgents(): Promise<void> {
   // Register all built-in agents
-  stateAggregator.registerAgent(claudeAgent);
-  stateAggregator.registerAgent(aiderAgent);
-  stateAggregator.registerAgent(codexAgent);
-  stateAggregator.registerAgent(geminiAgent);
-  stateAggregator.registerAgent(opencodeAgent);
+  for (const agent of [
+    claudeAgent,
+    aiderAgent,
+    codexAgent,
+    geminiAgent,
+    opencodeAgent,
+  ]) {
+    try {
+      stateAggregator.registerAgent(agent);
+    } catch (error) {
+      console.error(`Failed to register agent ${agent.id}:`, error);
+    }
+  }
 
   // Load and register custom agents from config file (Phase 5)
   try {

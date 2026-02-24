@@ -1,5 +1,15 @@
-import streamDeck, { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { stateAggregator, type AggregatedState, type PermissionMode, claudeAgent } from "../agents/index.js";
+import streamDeck, {
+  SingletonAction,
+  type KeyDownEvent,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+} from "@elgato/streamdeck";
+import {
+  stateAggregator,
+  type AggregatedState,
+  type PermissionMode,
+} from "../agents/index.js";
+import { escapeXml } from "../utils/svg-utils.js";
 
 /**
  * Mode Cycle Action - Cycles through permission modes for the active agent
@@ -8,9 +18,8 @@ import { stateAggregator, type AggregatedState, type PermissionMode, claudeAgent
  * If the active agent doesn't support mode cycling, it will show an alert.
  *
  * Mode tracking:
- * - Reads initial mode from state.json on appear
- * - After cycling, calculates next mode and persists to state.json
- * - Resets to "default" on session-start (via hooks)
+ * - Reads current mode from agent state on appear
+ * - After cycling, the state file watcher detects the actual mode change
  */
 export class ModeCycleAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.mode-cycle";
@@ -18,23 +27,14 @@ export class ModeCycleAction extends SingletonAction {
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   private updateHandler?: (state: AggregatedState) => void;
 
-  // Mode cycle order (Claude's Shift+Tab order)
-  private static readonly MODE_ORDER: PermissionMode[] = [
-    "default",
-    "plan",
-    "acceptEdits",
-    "dontAsk",
-    "bypassPermissions",
-  ];
-
   private modeColors: Record<string, string> = {
-    default: "#6b7280",           // gray
-    plan: "#3b82f6",              // blue
-    acceptEdits: "#f59e0b",       // amber
-    dontAsk: "#ef4444",           // red
+    default: "#6b7280", // gray
+    plan: "#3b82f6", // blue
+    acceptEdits: "#f59e0b", // amber
+    dontAsk: "#ef4444", // red
     bypassPermissions: "#22c55e", // green (yolo)
-    yolo: "#22c55e",              // alias
-    auto: "#ef4444",              // alias
+    yolo: "#22c55e", // alias
+    auto: "#ef4444", // alias
   };
 
   private modeLabels: Record<string, string> = {
@@ -72,24 +72,15 @@ export class ModeCycleAction extends SingletonAction {
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     try {
       const activeAgent = stateAggregator.getActiveAgent();
-      const agentState = activeAgent ? stateAggregator.getAgentState(activeAgent.id) : null;
 
-      // Check if active agent supports mode cycling
       if (!activeAgent || !activeAgent.capabilities.modeSwitch) {
         await ev.action.showAlert();
         return;
       }
 
-      // Send mode cycle to active agent
       const success = await stateAggregator.cycleMode();
 
       if (success) {
-        // Calculate and persist the next mode (for Claude agent)
-        if (activeAgent.id === "claude") {
-          const currentMode = (agentState?.mode as PermissionMode) || "default";
-          const nextMode = this.getNextMode(currentMode);
-          await claudeAgent.setPermissionMode(nextMode);
-        }
         await ev.action.showOk();
       } else {
         await ev.action.showAlert();
@@ -100,23 +91,22 @@ export class ModeCycleAction extends SingletonAction {
     }
   }
 
-  /**
-   * Calculate the next mode in the cycle
-   */
-  private getNextMode(currentMode: PermissionMode): PermissionMode {
-    const currentIndex = ModeCycleAction.MODE_ORDER.indexOf(currentMode);
-    const nextIndex = (currentIndex + 1) % ModeCycleAction.MODE_ORDER.length;
-    return ModeCycleAction.MODE_ORDER[nextIndex];
-  }
-
   private async updateAllDisplays(): Promise<void> {
     if (this.activeActions.size === 0) return;
-    await Promise.allSettled([...this.activeActions.values()].map((action) => this.updateDisplay(action)));
+    await Promise.allSettled(
+      [...this.activeActions.values()].map((action) =>
+        this.updateDisplay(action),
+      ),
+    );
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
     const activeAgent = stateAggregator.getActiveAgent();
-    const agentState = activeAgent ? stateAggregator.getAgentState(activeAgent.id) : null;
+    const agentState = activeAgent
+      ? stateAggregator.getAgentState(activeAgent.id)
+      : null;
 
     const mode = (agentState?.mode as PermissionMode) || "default";
     const color = this.modeColors[mode] || this.modeColors.default;
@@ -138,7 +128,7 @@ export class ModeCycleAction extends SingletonAction {
   <path d="M96 55 A24 24 0 0 1 72 79" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
   <path d="M77 77 L72 79 L71 74" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="72" y="60" font-family="system-ui" font-size="14" font-weight="bold" fill="${color}" text-anchor="middle">${label === "YOLO" ? "!" : label.charAt(0)}</text>
-  <text x="72" y="115" font-family="system-ui" font-size="16" font-weight="bold" fill="${color}" text-anchor="middle">${label}</text>
+  <text x="72" y="115" font-family="system-ui" font-size="16" font-weight="bold" fill="${color}" text-anchor="middle">${escapeXml(label)}</text>
 </svg>`;
   }
 }
