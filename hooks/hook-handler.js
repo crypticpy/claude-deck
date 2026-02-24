@@ -272,6 +272,7 @@ function handleEvent(hookType, data, state) {
     case "UserPromptSubmit": {
       state.sessionActive = true;
       state.status = "working";
+      state.pendingPermission = null;
       state.lastActivityTime = now;
       break;
     }

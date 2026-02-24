@@ -143,6 +143,16 @@ export class StateAggregator extends EventEmitter {
 
     this.emit("activeAgentChange", agentId, previousId);
     this.emitAggregatedState();
+
+    // Force the newly active agent to re-emit its current state so all
+    // button displays (which listen to agent.on("stateChange")) refresh
+    // immediately on window switch, not just when state.json changes.
+    if (agentId) {
+      const agent = this.agents.get(agentId);
+      if (agent) {
+        agent.emit("stateChange", agent.getState());
+      }
+    }
   }
 
   /**
