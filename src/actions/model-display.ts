@@ -9,6 +9,7 @@ import {
   stateAggregator,
   type AgentState,
 } from "../agents/index.js";
+import { escapeXml } from "../utils/svg-utils.js";
 
 /**
  * Model Display Action - Shows current model with visual badge
@@ -111,7 +112,7 @@ export class ModelDisplayAction extends SingletonAction {
         <text x="72" y="60" font-family="system-ui, sans-serif" font-size="36" fill="${config.color}" text-anchor="middle">${config.icon}</text>
 
         <!-- Model name -->
-        <text x="72" y="95" font-family="system-ui, sans-serif" font-size="22" fill="${config.color}" text-anchor="middle" font-weight="bold">${displayName}</text>
+        <text x="72" y="95" font-family="system-ui, sans-serif" font-size="22" fill="${config.color}" text-anchor="middle" font-weight="bold">${escapeXml(displayName)}</text>
 
         <!-- Subtitle -->
         <text x="72" y="120" font-family="system-ui, sans-serif" font-size="12" fill="#666" text-anchor="middle">TAP TO SWITCH</text>

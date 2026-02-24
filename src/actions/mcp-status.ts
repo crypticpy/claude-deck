@@ -15,6 +15,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { claudeAgent } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
+import { escapeXml } from "../utils/svg-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -41,11 +42,17 @@ export class McpStatusAction extends SingletonAction {
   private pressStartedAt = new Map<string, number>();
 
   private cachedAt = 0;
-  private cachedServers: { names: string[]; servers: Record<string, McpServerConfig> } = { names: [], servers: {} };
+  private cachedServers: {
+    names: string[];
+    servers: Record<string, McpServerConfig>;
+  } = { names: [], servers: {} };
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
-    this.settingsById.set(ev.action.id, (ev.payload.settings as McpStatusSettings) ?? {});
+    this.settingsById.set(
+      ev.action.id,
+      (ev.payload.settings as McpStatusSettings) ?? {},
+    );
     await this.updateDisplay(ev.action);
   }
 
@@ -55,16 +62,25 @@ export class McpStatusAction extends SingletonAction {
     this.pressStartedAt.delete(ev.action.id);
   }
 
-  override async onDidReceiveSettings(ev: DidReceiveSettingsEvent): Promise<void> {
-    this.settingsById.set(ev.action.id, (ev.payload.settings as McpStatusSettings) ?? {});
+  override async onDidReceiveSettings(
+    ev: DidReceiveSettingsEvent,
+  ): Promise<void> {
+    this.settingsById.set(
+      ev.action.id,
+      (ev.payload.settings as McpStatusSettings) ?? {},
+    );
     await this.updateDisplay(ev.action);
   }
 
-  override async onPropertyInspectorDidAppear(ev: PropertyInspectorDidAppearEvent): Promise<void> {
+  override async onPropertyInspectorDidAppear(
+    ev: PropertyInspectorDidAppearEvent,
+  ): Promise<void> {
     await this.sendPiState(ev.action.id);
   }
 
-  override async onSendToPlugin(ev: SendToPluginEvent<McpStatusPiMessage, McpStatusSettings>): Promise<void> {
+  override async onSendToPlugin(
+    ev: SendToPluginEvent<McpStatusPiMessage, McpStatusSettings>,
+  ): Promise<void> {
     const payload = ev.payload as McpStatusPiMessage;
     if (payload?.type === "refresh") {
       await this.sendPiState(ev.action.id);
@@ -84,7 +100,9 @@ export class McpStatusAction extends SingletonAction {
     const longPressMs = settings.longPressMs ?? 650;
 
     const longPress = heldMs >= longPressMs;
-    const command = longPress ? settings.onLongPressCommand?.trim() : settings.onPressCommand?.trim();
+    const command = longPress
+      ? settings.onLongPressCommand?.trim()
+      : settings.onPressCommand?.trim();
 
     try {
       if (command) {
@@ -119,7 +137,10 @@ export class McpStatusAction extends SingletonAction {
     return join(homedir(), ".claude", "settings.json");
   }
 
-  private async readMcpServers(): Promise<{ names: string[]; servers: Record<string, McpServerConfig> }> {
+  private async readMcpServers(): Promise<{
+    names: string[];
+    servers: Record<string, McpServerConfig>;
+  }> {
     const now = Date.now();
     if (now - this.cachedAt < 2000) return this.cachedServers;
 
@@ -127,8 +148,11 @@ export class McpStatusAction extends SingletonAction {
     try {
       const content = await readFile(settingsPath, "utf-8");
       const json = JSON.parse(content) as Record<string, unknown>;
-      const mcpServers = (json.mcpServers ?? json.mcp_servers) as Record<string, McpServerConfig> | undefined;
-      const servers = mcpServers && typeof mcpServers === "object" ? mcpServers : {};
+      const mcpServers = (json.mcpServers ?? json.mcp_servers) as
+        | Record<string, McpServerConfig>
+        | undefined;
+      const servers =
+        mcpServers && typeof mcpServers === "object" ? mcpServers : {};
       const names = Object.keys(servers).sort();
       this.cachedAt = now;
       this.cachedServers = { names, servers };
@@ -149,25 +173,28 @@ export class McpStatusAction extends SingletonAction {
     } as unknown as JsonValue);
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
     const settings = this.getSettings(action.id);
     const { names } = await this.readMcpServers();
     const count = names.length;
 
     const color = count > 0 ? "#a855f7" : "#64748b";
     const title = (settings.label ?? "MCP").toUpperCase();
-    const line1 = count > 0 ? names[0] ?? "" : "No servers";
-    const line2 = count > 1 ? names[1] ?? "" : count > 0 ? `${count} configured` : "";
+    const line1 = count > 0 ? (names[0] ?? "") : "No servers";
+    const line2 =
+      count > 1 ? (names[1] ?? "") : count > 0 ? `${count} configured` : "";
 
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
         <rect width="144" height="144" fill="#0f172a" rx="12"/>
-        <text x="72" y="22" font-family="system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">${title}</text>
+        <text x="72" y="22" font-family="system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">${escapeXml(title)}</text>
         <rect x="16" y="30" width="112" height="58" rx="10" fill="${color}" opacity="0.16"/>
         <rect x="16" y="30" width="112" height="58" rx="10" fill="none" stroke="${color}" stroke-width="3"/>
         <text x="72" y="56" font-family="system-ui, sans-serif" font-size="14" fill="${color}" text-anchor="middle" font-weight="bold">${count}</text>
-        <text x="72" y="74" font-family="monospace" font-size="10" fill="#94a3b8" text-anchor="middle">${this.truncate(line1, 18)}</text>
-        <text x="72" y="90" font-family="monospace" font-size="10" fill="#94a3b8" text-anchor="middle">${this.truncate(line2, 18)}</text>
+        <text x="72" y="74" font-family="monospace" font-size="10" fill="#94a3b8" text-anchor="middle">${escapeXml(this.truncate(line1, 18))}</text>
+        <text x="72" y="90" font-family="monospace" font-size="10" fill="#94a3b8" text-anchor="middle">${escapeXml(this.truncate(line2, 18))}</text>
         <text x="72" y="124" font-family="system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Tap: open settings</text>
       </svg>
     `;

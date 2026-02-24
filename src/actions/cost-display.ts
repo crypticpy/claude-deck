@@ -12,6 +12,7 @@ import {
   type AgentState,
 } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
+import { escapeXml } from "../utils/svg-utils.js";
 
 type CostBudgetSettings = JsonObject & {
   budgetUsd?: number;
@@ -204,7 +205,7 @@ export class CostDisplayAction extends SingletonAction {
         <rect width="144" height="144" fill="#0f172a" rx="12"/>
 
         <!-- Title -->
-        <text x="72" y="22" font-family="system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">${(settings.label ?? "SESSION COST").toUpperCase()}</text>
+        <text x="72" y="22" font-family="system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">${escapeXml((settings.label ?? "SESSION COST").toUpperCase())}</text>
 
         <!-- Main cost display -->
         <text x="72" y="62" font-family="system-ui, sans-serif" font-size="22" fill="${costColor}" text-anchor="middle" font-weight="bold">${budgetLine}</text>
@@ -221,7 +222,7 @@ export class CostDisplayAction extends SingletonAction {
         }
 
         <!-- Model indicator -->
-        <text x="72" y="125" font-family="system-ui, sans-serif" font-size="11" fill="#475569" text-anchor="middle">${(state.model || "sonnet").toUpperCase()}</text>
+        <text x="72" y="125" font-family="system-ui, sans-serif" font-size="11" fill="#475569" text-anchor="middle">${escapeXml((state.model || "sonnet").toUpperCase())}</text>
       </svg>
     `;
   }

@@ -29,7 +29,10 @@ export interface StateAggregatorEvents {
   /** Emitted when any agent's state changes */
   stateChange: (state: AggregatedState) => void;
   /** Emitted when the active agent changes */
-  activeAgentChange: (agentId: string | null, previousAgentId: string | null) => void;
+  activeAgentChange: (
+    agentId: string | null,
+    previousAgentId: string | null,
+  ) => void;
   /** Emitted when an agent becomes available/unavailable */
   agentAvailabilityChange: (agentId: string, available: boolean) => void;
 }
@@ -43,6 +46,7 @@ export interface StateAggregatorEvents {
 export class StateAggregator extends EventEmitter {
   private agents: Map<string, BaseAgentAdapter> = new Map();
   private agentStates: Map<string, AgentState> = new Map();
+  private agentHandlers: Map<string, (state: AgentState) => void> = new Map();
   private activeAgentId: string | null = null;
   private isWatching = false;
   private autoSwitchOnFocus = true;
@@ -55,11 +59,13 @@ export class StateAggregator extends EventEmitter {
     this.agents.set(adapter.id, adapter);
     this.agentStates.set(adapter.id, adapter.getDefaultState());
 
-    // Listen for state changes from this agent
-    adapter.on("stateChange", (state: AgentState) => {
+    // Listen for state changes from this agent (store handler for targeted removal)
+    const handler = (state: AgentState) => {
       this.agentStates.set(adapter.id, state);
       this.emitAggregatedState();
-    });
+    };
+    adapter.on("stateChange", handler);
+    this.agentHandlers.set(adapter.id, handler);
   }
 
   /**
@@ -67,10 +73,14 @@ export class StateAggregator extends EventEmitter {
    */
   unregisterAgent(agentId: string): void {
     const adapter = this.agents.get(agentId);
+    const handler = this.agentHandlers.get(agentId);
+    if (adapter && handler) {
+      adapter.removeListener("stateChange", handler);
+    }
     if (adapter) {
-      adapter.removeAllListeners("stateChange");
       adapter.dispose();
     }
+    this.agentHandlers.delete(agentId);
     this.agents.delete(agentId);
     this.agentStates.delete(agentId);
 
@@ -232,7 +242,10 @@ export class StateAggregator extends EventEmitter {
 
     // Remove the stored bound handler
     if (this.boundAgentFocusHandler) {
-      terminalDetector.removeListener("agentFocusChange", this.boundAgentFocusHandler);
+      terminalDetector.removeListener(
+        "agentFocusChange",
+        this.boundAgentFocusHandler,
+      );
       this.boundAgentFocusHandler = undefined;
     }
     terminalDetector.stopWatching();
@@ -249,14 +262,16 @@ export class StateAggregator extends EventEmitter {
    * Refresh state for all agents
    */
   async refreshAllStates(): Promise<void> {
-    const refreshPromises = Array.from(this.agents.values()).map(async (agent) => {
-      try {
-        const state = await agent.refreshState();
-        this.agentStates.set(agent.id, state);
-      } catch {
-        // Keep existing state on error
-      }
-    });
+    const refreshPromises = Array.from(this.agents.values()).map(
+      async (agent) => {
+        try {
+          const state = await agent.refreshState();
+          this.agentStates.set(agent.id, state);
+        } catch {
+          // Keep existing state on error
+        }
+      },
+    );
 
     await Promise.all(refreshPromises);
     this.emitAggregatedState();
@@ -336,7 +351,10 @@ export class StateAggregator extends EventEmitter {
   /**
    * Spawn a new session for an agent
    */
-  async spawnSession(agentId: string, options?: Parameters<BaseAgentAdapter["spawnSession"]>[0]): Promise<void> {
+  async spawnSession(
+    agentId: string,
+    options?: Parameters<BaseAgentAdapter["spawnSession"]>[0],
+  ): Promise<void> {
     const agent = this.agents.get(agentId);
     if (!agent) throw new Error(`Unknown agent: ${agentId}`);
     await agent.spawnSession(options);
@@ -345,7 +363,10 @@ export class StateAggregator extends EventEmitter {
   /**
    * Continue session for an agent
    */
-  async continueSession(agentId: string, options?: { cwd?: string }): Promise<void> {
+  async continueSession(
+    agentId: string,
+    options?: { cwd?: string },
+  ): Promise<void> {
     const agent = this.agents.get(agentId);
     if (!agent) throw new Error(`Unknown agent: ${agentId}`);
     await agent.continueSession(options);

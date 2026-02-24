@@ -1,5 +1,12 @@
-import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent, type DidReceiveSettingsEvent } from "@elgato/streamdeck";
+import {
+  SingletonAction,
+  type KeyDownEvent,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+  type DidReceiveSettingsEvent,
+} from "@elgato/streamdeck";
 import { claudeAgent } from "../agents/index.js";
+import { escapeXml } from "../utils/svg-utils.js";
 
 interface SlashCommandSettings {
   command?: string;
@@ -23,12 +30,20 @@ export class SlashCommandAction extends SingletonAction {
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.settingsById.set(ev.action.id, (ev.payload.settings as SlashCommandSettings) || {});
+    this.settingsById.set(
+      ev.action.id,
+      (ev.payload.settings as SlashCommandSettings) || {},
+    );
     await this.updateDisplay(ev.action);
   }
 
-  override async onDidReceiveSettings(ev: DidReceiveSettingsEvent): Promise<void> {
-    this.settingsById.set(ev.action.id, (ev.payload.settings as SlashCommandSettings) || {});
+  override async onDidReceiveSettings(
+    ev: DidReceiveSettingsEvent,
+  ): Promise<void> {
+    this.settingsById.set(
+      ev.action.id,
+      (ev.payload.settings as SlashCommandSettings) || {},
+    );
     await this.updateDisplay(ev.action);
   }
 
@@ -58,7 +73,9 @@ export class SlashCommandAction extends SingletonAction {
     }
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
     const settings = this.getSettings(action.id);
     const svg = this.createCommandSvg(settings);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
@@ -99,8 +116,8 @@ export class SlashCommandAction extends SingletonAction {
         <text x="72" y="72" font-family="monospace" font-size="28" fill="${color}" text-anchor="middle" font-weight="bold">/</text>
 
         <!-- Label -->
-        <text x="72" y="108" font-family="system-ui, sans-serif" font-size="14" fill="${color}" text-anchor="middle" font-weight="bold">${displayLabel}</text>
-        <text x="72" y="125" font-family="monospace" font-size="10" fill="#64748b" text-anchor="middle">${command}</text>
+        <text x="72" y="108" font-family="system-ui, sans-serif" font-size="14" fill="${color}" text-anchor="middle" font-weight="bold">${escapeXml(displayLabel)}</text>
+        <text x="72" y="125" font-family="monospace" font-size="10" fill="#64748b" text-anchor="middle">${escapeXml(command)}</text>
       </svg>
     `;
   }

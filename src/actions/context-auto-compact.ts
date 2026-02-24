@@ -9,6 +9,7 @@ import streamDeck, {
 } from "@elgato/streamdeck";
 import { claudeAgent, type AgentState } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
+import { escapeXml } from "../utils/svg-utils.js";
 
 type ContextAutoCompactSettings = JsonObject & {
   thresholdPercent?: number;
@@ -185,7 +186,7 @@ export class ContextAutoCompactAction extends SingletonAction {
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
         <rect width="144" height="144" fill="#0f172a" rx="12"/>
-        <text x="72" y="22" font-family="system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">${label}</text>
+        <text x="72" y="22" font-family="system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">${escapeXml(label)}</text>
 
         <circle cx="72" cy="66" r="42" fill="${color}" opacity="0.14"/>
         <circle cx="72" cy="66" r="42" fill="none" stroke="${color}" stroke-width="4"/>

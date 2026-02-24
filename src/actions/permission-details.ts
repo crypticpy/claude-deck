@@ -4,6 +4,7 @@ import {
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
 import { claudeAgent, type AgentState } from "../agents/index.js";
+import { escapeXml } from "../utils/svg-utils.js";
 
 export class PermissionDetailsAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.permission-details";
@@ -34,19 +35,32 @@ export class PermissionDetailsAction extends SingletonAction {
   }
 
   private async updateAllWithState(state: AgentState): Promise<void> {
-    await Promise.allSettled([...this.activeActions.values()].map((action) => this.updateDisplay(action, state)));
+    await Promise.allSettled(
+      [...this.activeActions.values()].map((action) =>
+        this.updateDisplay(action, state),
+      ),
+    );
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"], state: AgentState): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+    state: AgentState,
+  ): Promise<void> {
     const pending = state.pendingPermission;
     const hasPending = !!pending;
     const color = hasPending ? "#eab308" : "#64748b";
-    const title = hasPending ? pending?.tool ?? "Permission" : "None";
-    const type = hasPending ? pending?.type ?? "permission" : "—";
+    const title = hasPending ? (pending?.tool ?? "Permission") : "None";
+    const type = hasPending ? (pending?.type ?? "permission") : "—";
 
     const requestedAt = pending?.requestedAt;
-    const ageSeconds = requestedAt ? Math.max(0, Math.floor((Date.now() - Date.parse(requestedAt)) / 1000)) : 0;
-    const ageLabel = hasPending ? (ageSeconds >= 60 ? `${Math.floor(ageSeconds / 60)}m` : `${ageSeconds}s`) : "";
+    const ageSeconds = requestedAt
+      ? Math.max(0, Math.floor((Date.now() - Date.parse(requestedAt)) / 1000))
+      : 0;
+    const ageLabel = hasPending
+      ? ageSeconds >= 60
+        ? `${Math.floor(ageSeconds / 60)}m`
+        : `${ageSeconds}s`
+      : "";
 
     const desc = hasPending ? (pending?.description ?? "") : "";
 
@@ -56,9 +70,9 @@ export class PermissionDetailsAction extends SingletonAction {
         <text x="72" y="22" font-family="system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">PERMISSION</text>
         <rect x="16" y="30" width="112" height="58" rx="10" fill="${color}" opacity="0.16"/>
         <rect x="16" y="30" width="112" height="58" rx="10" fill="none" stroke="${color}" stroke-width="3"/>
-        <text x="72" y="56" font-family="system-ui, sans-serif" font-size="14" fill="${color}" text-anchor="middle" font-weight="bold">${this.truncate(title, 14)}</text>
-        <text x="72" y="74" font-family="monospace" font-size="10" fill="#94a3b8" text-anchor="middle">${this.truncate(type, 18)}${ageLabel ? ` • ${ageLabel}` : ""}</text>
-        <text x="72" y="110" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">${hasPending ? this.truncate(desc, 22) : "No pending request"}</text>
+        <text x="72" y="56" font-family="system-ui, sans-serif" font-size="14" fill="${color}" text-anchor="middle" font-weight="bold">${escapeXml(this.truncate(title, 14))}</text>
+        <text x="72" y="74" font-family="monospace" font-size="10" fill="#94a3b8" text-anchor="middle">${escapeXml(this.truncate(type, 18))}${ageLabel ? ` • ${ageLabel}` : ""}</text>
+        <text x="72" y="110" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">${hasPending ? escapeXml(this.truncate(desc, 22)) : "No pending request"}</text>
         <text x="72" y="130" font-family="system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">${hasPending ? "Use Approve/Reject" : ""}</text>
       </svg>
     `;

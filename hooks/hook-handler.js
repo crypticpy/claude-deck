@@ -34,6 +34,33 @@ const os = require("node:os");
 const STATE_DIR = path.join(os.homedir(), ".claude-deck");
 const STATE_FILE = path.join(STATE_DIR, "state.json");
 const STATE_PERMS = 0o600;
+const LOCK_FILE = STATE_FILE + ".lock";
+const LOCK_TIMEOUT_MS = 2000;
+
+function acquireLock() {
+  const start = Date.now();
+  while (Date.now() - start < LOCK_TIMEOUT_MS) {
+    try {
+      fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: "wx" });
+      return true;
+    } catch {
+      // Lock exists, wait briefly and retry
+      const wait = Date.now();
+      while (Date.now() - wait < 10) {
+        /* spin */
+      }
+    }
+  }
+  return false;
+}
+
+function releaseLock() {
+  try {
+    fs.unlinkSync(LOCK_FILE);
+  } catch {
+    /* ignore */
+  }
+}
 
 // Safety timeout — if stdin never closes, exit after 5 seconds
 const STDIN_TIMEOUT_MS = 5000;
@@ -190,16 +217,22 @@ function handleEvent(hookType, data, state) {
 
     case "PreToolUse": {
       const toolName = data.tool_name || "unknown";
-      state.status = "working";
+      state.status = "waiting"; // Show as waiting until PostToolUse confirms execution
       state.lastTool = toolName;
       state.toolCallCount = (state.toolCallCount || 0) + 1;
       state.toolUsage[toolName] = (state.toolUsage[toolName] || 0) + 1;
       state.lastActivityTime = now;
+      state.pendingPermission = {
+        type: "permission",
+        tool: toolName,
+        requestedAt: now,
+      };
       break;
     }
 
     case "PostToolUse": {
-      // Keep status=working (don't flicker to idle between tool calls)
+      state.status = "working"; // Tool executed, back to working
+      state.pendingPermission = null;
       state.lastActivityTime = now;
       break;
     }
@@ -219,6 +252,7 @@ function handleEvent(hookType, data, state) {
     }
 
     case "UserPromptSubmit": {
+      state.sessionActive = true;
       state.status = "working";
       state.lastActivityTime = now;
       break;
@@ -255,10 +289,15 @@ async function main() {
     const raw = await readStdin();
     const data = parseInput(raw);
 
-    // Read current state, apply event, write back
-    const state = readState();
-    handleEvent(hookType, data, state);
-    writeState(state);
+    // Read current state, apply event, write back (with file locking)
+    const locked = acquireLock();
+    try {
+      const state = readState();
+      handleEvent(hookType, data, state);
+      writeState(state);
+    } finally {
+      if (locked) releaseLock();
+    }
 
     // For PreToolUse, Claude Code expects valid JSON on stdout.
     // Output an empty object so we don't interfere with the hook protocol.

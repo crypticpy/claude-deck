@@ -1,5 +1,12 @@
-import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent, type DidReceiveSettingsEvent } from "@elgato/streamdeck";
+import {
+  SingletonAction,
+  type KeyDownEvent,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+  type DidReceiveSettingsEvent,
+} from "@elgato/streamdeck";
 import { claudeAgent } from "../agents/index.js";
+import { escapeXml } from "../utils/svg-utils.js";
 
 interface PromptPresetSettings {
   prompt?: string;
@@ -16,12 +23,20 @@ export class PromptPresetAction extends SingletonAction {
   private settingsById = new Map<string, PromptPresetSettings>();
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.settingsById.set(ev.action.id, (ev.payload.settings as PromptPresetSettings) || {});
+    this.settingsById.set(
+      ev.action.id,
+      (ev.payload.settings as PromptPresetSettings) || {},
+    );
     await this.updateDisplay(ev.action);
   }
 
-  override async onDidReceiveSettings(ev: DidReceiveSettingsEvent): Promise<void> {
-    this.settingsById.set(ev.action.id, (ev.payload.settings as PromptPresetSettings) || {});
+  override async onDidReceiveSettings(
+    ev: DidReceiveSettingsEvent,
+  ): Promise<void> {
+    this.settingsById.set(
+      ev.action.id,
+      (ev.payload.settings as PromptPresetSettings) || {},
+    );
     await this.updateDisplay(ev.action);
   }
 
@@ -44,7 +59,9 @@ export class PromptPresetAction extends SingletonAction {
     }
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
     const settings = this.getSettings(action.id);
     const svg = this.createPresetSvg(settings);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
@@ -74,7 +91,7 @@ export class PromptPresetAction extends SingletonAction {
         <!-- Lines inside bubble -->
         <line x1="45" y1="55" x2="99" y2="55" stroke="${color}" stroke-width="2" opacity="0.5"/>
         <line x1="45" y1="67" x2="85" y2="67" stroke="${color}" stroke-width="2" opacity="0.5"/>
-        <text x="72" y="120" font-family="system-ui" font-size="13" fill="${color}" text-anchor="middle" font-weight="bold">${displayLabel}</text>
+        <text x="72" y="120" font-family="system-ui" font-size="13" fill="${color}" text-anchor="middle" font-weight="bold">${escapeXml(displayLabel)}</text>
       </svg>
     `;
   }

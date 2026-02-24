@@ -23,6 +23,7 @@ import {
   STATUS_COLORS,
   type AggregatedState,
 } from "../agents/index.js";
+import { escapeXml } from "../utils/svg-utils.js";
 
 export class ActiveAgentDisplayAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.active-agent-display";
@@ -37,14 +38,14 @@ export class ActiveAgentDisplayAction extends SingletonAction {
 
     if (!this.stateHandler) {
       this.stateHandler = () => {
-        void this.updateAllDisplays();
+        void this.updateAllDisplays().catch(() => {});
       };
       stateAggregator.on("stateChange", this.stateHandler);
     }
 
     if (!this.activeChangeHandler) {
       this.activeChangeHandler = () => {
-        void this.updateAllDisplays();
+        void this.updateAllDisplays().catch(() => {});
       };
       stateAggregator.on("activeAgentChange", this.activeChangeHandler);
     }
@@ -85,14 +86,22 @@ export class ActiveAgentDisplayAction extends SingletonAction {
 
   private async updateAllDisplays(): Promise<void> {
     await Promise.allSettled(
-      [...this.activeActions.values()].map((action) => this.updateDisplay(action))
+      [...this.activeActions.values()].map((action) =>
+        this.updateDisplay(action),
+      ),
     );
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
     const activeAgentId = stateAggregator.getActiveAgentId();
-    const agent = activeAgentId ? stateAggregator.getAgent(activeAgentId) : null;
-    const state = activeAgentId ? stateAggregator.getAgentState(activeAgentId) : null;
+    const agent = activeAgentId
+      ? stateAggregator.getAgent(activeAgentId)
+      : null;
+    const state = activeAgentId
+      ? stateAggregator.getAgentState(activeAgentId)
+      : null;
 
     if (!agent || !state) {
       await action.setTitle("No Agent");
@@ -100,7 +109,10 @@ export class ActiveAgentDisplayAction extends SingletonAction {
       return;
     }
 
-    const agentColor = AGENT_COLORS[agent.id] ?? { primary: "#888888", muted: "#444444" };
+    const agentColor = AGENT_COLORS[agent.id] ?? {
+      primary: "#888888",
+      muted: "#444444",
+    };
     const statusColor = STATUS_COLORS[state.status] ?? STATUS_COLORS.idle;
 
     const svg = this.generateAgentSvg(
@@ -108,11 +120,13 @@ export class ActiveAgentDisplayAction extends SingletonAction {
       agentColor.primary,
       statusColor,
       state.status,
-      state.model
+      state.model,
     );
 
     await action.setTitle("");
-    await action.setImage(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+    await action.setImage(
+      `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
+    );
   }
 
   private generateAgentSvg(
@@ -120,7 +134,7 @@ export class ActiveAgentDisplayAction extends SingletonAction {
     agentColor: string,
     statusColor: string,
     status: string,
-    model?: string
+    model?: string,
   ): string {
     const statusText = status.charAt(0).toUpperCase() + status.slice(1);
     const modelText = model ? this.formatModelName(model) : "";
@@ -142,23 +156,25 @@ export class ActiveAgentDisplayAction extends SingletonAction {
   <!-- Status indicator -->
   <circle cx="100" cy="30" r="8" fill="${statusColor}"/>
   <!-- Agent name -->
-  <text x="72" y="100" font-family="system-ui" font-size="14" font-weight="bold" fill="${agentColor}" text-anchor="middle">${name}</text>
+  <text x="72" y="100" font-family="system-ui" font-size="14" font-weight="bold" fill="${agentColor}" text-anchor="middle">${escapeXml(name)}</text>
   <!-- Status text -->
-  <text x="72" y="118" font-family="system-ui" font-size="11" fill="#9ca3af" text-anchor="middle">${statusText}${modelText ? ` • ${modelText}` : ""}</text>
+  <text x="72" y="118" font-family="system-ui" font-size="11" fill="#9ca3af" text-anchor="middle">${escapeXml(statusText)}${modelText ? ` • ${escapeXml(modelText)}` : ""}</text>
   <!-- Active indicator -->
   <text x="72" y="56" font-family="system-ui" font-size="20" font-weight="bold" fill="${agentColor}" text-anchor="middle">●</text>
 </svg>`;
   }
 
   private generateNoAgentSvg(): string {
-    return `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+    return `data:image/svg+xml;base64,${Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
   <rect width="144" height="144" fill="#0f172a" rx="12"/>
   <circle cx="72" cy="50" r="28" fill="#374151" opacity="0.3"/>
   <circle cx="72" cy="50" r="28" fill="none" stroke="#374151" stroke-width="2" stroke-dasharray="4 4"/>
   <text x="72" y="56" font-family="system-ui" font-size="20" fill="#6b7280" text-anchor="middle">?</text>
   <text x="72" y="100" font-family="system-ui" font-size="12" fill="#6b7280" text-anchor="middle">No Agent</text>
   <text x="72" y="118" font-family="system-ui" font-size="10" fill="#4b5563" text-anchor="middle">Press to select</text>
-</svg>`).toString("base64")}`;
+</svg>`,
+    ).toString("base64")}`;
   }
 
   private formatModelName(model: string): string {

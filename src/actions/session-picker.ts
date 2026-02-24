@@ -13,6 +13,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { stateAggregator } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
+import { escapeXml } from "../utils/svg-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -118,10 +119,10 @@ export class SessionPickerAction extends SingletonAction {
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
         <rect width="144" height="144" fill="#0f172a" rx="12"/>
-        <text x="72" y="26" font-family="system-ui, sans-serif" font-size="11" fill="#64748b" text-anchor="middle">${label}</text>
+        <text x="72" y="26" font-family="system-ui, sans-serif" font-size="11" fill="#64748b" text-anchor="middle">${escapeXml(label)}</text>
         <rect x="18" y="38" width="108" height="52" rx="10" fill="${color}" opacity="0.16"/>
         <rect x="18" y="38" width="108" height="52" rx="10" fill="none" stroke="${color}" stroke-width="3"/>
-        <text x="72" y="66" font-family="system-ui, sans-serif" font-size="16" fill="${color}" text-anchor="middle" font-weight="bold">${this.truncate(projectName, 12)}</text>
+        <text x="72" y="66" font-family="system-ui, sans-serif" font-size="16" fill="${color}" text-anchor="middle" font-weight="bold">${escapeXml(this.truncate(projectName, 12))}</text>
         <text x="72" y="86" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">Tap: continue</text>
         <text x="72" y="118" font-family="system-ui, sans-serif" font-size="11" fill="${color}" text-anchor="middle" font-weight="bold">PROJECT</text>
       </svg>

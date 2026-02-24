@@ -36,7 +36,7 @@ const execFileAsync = promisify(execFile);
 
 async function writeFileAtomic(path: string, contents: string): Promise<void> {
   const tmpPath = `${path}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(tmpPath, contents);
+  await writeFile(tmpPath, contents, { mode: 0o600 });
   await rename(tmpPath, path);
 }
 
@@ -268,7 +268,10 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
         id: this.id,
         name: this.name,
         active: false, // Set by StateAggregator based on terminal focus
-        status: fileState.status ?? "idle",
+        status:
+          fileState.sessionActive === false
+            ? "disconnected"
+            : (fileState.status ?? "idle"),
         hasPermissionPending: !!fileState.pendingPermission,
         model: fileState.currentModel,
         mode: fileState.permissionMode,

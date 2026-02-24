@@ -4,8 +4,12 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { stateAggregator, type AggregatedState } from "../agents/state-aggregator.js";
+import {
+  stateAggregator,
+  type AggregatedState,
+} from "../agents/state-aggregator.js";
 import type { AgentState } from "../agents/base-agent.js";
+import { escapeXml } from "../utils/svg-utils.js";
 
 /**
  * Stats view modes for cycling through different analytics displays
@@ -104,15 +108,19 @@ export class UsageAnalyticsAction extends SingletonAction {
   private async updateAllWithState(state: AggregatedState): Promise<void> {
     await Promise.allSettled(
       [...this.activeActions.entries()].map(([id, action]) =>
-        this.updateDisplay(action, state, this.viewByAction.get(id) ?? "summary")
-      )
+        this.updateDisplay(
+          action,
+          state,
+          this.viewByAction.get(id) ?? "summary",
+        ),
+      ),
     );
   }
 
   private async updateDisplay(
     action: WillAppearEvent["action"],
     state: AggregatedState,
-    view?: StatsView
+    view?: StatsView,
   ): Promise<void> {
     const currentView = view ?? this.viewByAction.get(action.id) ?? "summary";
     const analytics = this.aggregateAnalytics(state);
@@ -183,7 +191,10 @@ export class UsageAnalyticsAction extends SingletonAction {
     const tokens = state.tokens || { input: 0, output: 0 };
     const model = (state.model || "sonnet").toLowerCase();
     const prices = PRICING[model] || PRICING.sonnet;
-    return (tokens.input / 1_000_000) * prices.input + (tokens.output / 1_000_000) * prices.output;
+    return (
+      (tokens.input / 1_000_000) * prices.input +
+      (tokens.output / 1_000_000) * prices.output
+    );
   }
 
   private formatCost(cost: number): string {
@@ -232,7 +243,8 @@ export class UsageAnalyticsAction extends SingletonAction {
     if (analytics.totalCost > 5.0) costColor = "#f97316"; // Orange
     if (analytics.totalCost > 15.0) costColor = "#ef4444"; // Red
 
-    const agentStatusColor = analytics.activeAgentCount > 0 ? "#22c55e" : "#64748b";
+    const agentStatusColor =
+      analytics.activeAgentCount > 0 ? "#22c55e" : "#64748b";
 
     return `
       <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
@@ -276,7 +288,7 @@ export class UsageAnalyticsAction extends SingletonAction {
       const total = tokens.input + tokens.output;
       const name = agentId.charAt(0).toUpperCase() + agentId.slice(1, 6);
       agentLines.push(
-        `<text x="20" y="${y}" font-family="monospace" font-size="9" fill="#94a3b8">${name}: ${this.formatTokens(total)}</text>`
+        `<text x="20" y="${y}" font-family="monospace" font-size="9" fill="#94a3b8">${escapeXml(name)}: ${this.formatTokens(total)}</text>`,
       );
       y += 14;
     }
@@ -325,7 +337,7 @@ export class UsageAnalyticsAction extends SingletonAction {
     for (const [agentId, seconds] of sortedAgents) {
       const name = agentId.charAt(0).toUpperCase() + agentId.slice(1, 6);
       agentLines.push(
-        `<text x="20" y="${y}" font-family="monospace" font-size="9" fill="#94a3b8">${name}: ${this.formatDuration(seconds)}</text>`
+        `<text x="20" y="${y}" font-family="monospace" font-size="9" fill="#94a3b8">${escapeXml(name)}: ${this.formatDuration(seconds)}</text>`,
       );
       y += 14;
     }
@@ -356,7 +368,10 @@ export class UsageAnalyticsAction extends SingletonAction {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
 
-    const totalUsage = Array.from(analytics.toolUsage.values()).reduce((a, b) => a + b, 0);
+    const totalUsage = Array.from(analytics.toolUsage.values()).reduce(
+      (a, b) => a + b,
+      0,
+    );
 
     // Create tool list
     const toolLines: string[] = [];
@@ -367,11 +382,14 @@ export class UsageAnalyticsAction extends SingletonAction {
       const [tool, count] = sortedTools[i];
       const pct = totalUsage > 0 ? Math.round((count / totalUsage) * 100) : 0;
       const shortName = tool.length > 10 ? tool.slice(0, 10) + ".." : tool;
-      const barWidth = Math.max(2, Math.round((count / (sortedTools[0]?.[1] || 1)) * 60));
+      const barWidth = Math.max(
+        2,
+        Math.round((count / (sortedTools[0]?.[1] || 1)) * 60),
+      );
 
       toolLines.push(`
         <rect x="20" y="${y - 8}" width="${barWidth}" height="12" rx="2" fill="${colors[i]}"/>
-        <text x="85" y="${y}" font-family="monospace" font-size="9" fill="#e2e8f0">${shortName}</text>
+        <text x="85" y="${y}" font-family="monospace" font-size="9" fill="#e2e8f0">${escapeXml(shortName)}</text>
         <text x="130" y="${y}" font-family="monospace" font-size="8" fill="#64748b" text-anchor="end">${pct}%</text>
       `);
       y += 18;

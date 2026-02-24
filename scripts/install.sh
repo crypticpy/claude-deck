@@ -300,8 +300,9 @@ HOOKS_CONFIG=$(cat << EOF
 EOF
 )
 
-# Merge hooks into settings
-UPDATED_SETTINGS=$(echo "$SETTINGS" | jq --argjson hooks "$HOOKS_CONFIG" '.hooks = ($hooks * (.hooks // {}))')
+# Merge hooks — Claude Deck entries replace existing ones for the same event types.
+# User hooks for other event types are preserved.
+UPDATED_SETTINGS=$(echo "$SETTINGS" | jq --argjson hooks "$HOOKS_CONFIG" '.hooks = ((.hooks // {}) * $hooks)')
 echo "$UPDATED_SETTINGS" | jq '.' > "$SETTINGS_FILE"
 log_success "Claude Code hooks configured"
 

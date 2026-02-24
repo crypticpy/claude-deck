@@ -4,6 +4,7 @@ import {
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
 import { claudeAgent, type AgentState } from "../agents/index.js";
+import { escapeXml } from "../utils/svg-utils.js";
 
 /**
  * Activity Display Action - Shows current Claude activity and recent tool calls
@@ -124,11 +125,11 @@ export class ActivityDisplayAction extends SingletonAction {
         </g>
 
         <!-- Status text -->
-        <text x="72" y="70" font-family="system-ui, sans-serif" font-size="16" fill="${config.color}" text-anchor="middle" font-weight="bold">${statusText}</text>
+        <text x="72" y="70" font-family="system-ui, sans-serif" font-size="16" fill="${config.color}" text-anchor="middle" font-weight="bold">${escapeXml(statusText)}</text>
 
         <!-- Last tool -->
         <text x="24" y="95" font-family="system-ui, sans-serif" font-size="10" fill="#6b7280">LAST TOOL</text>
-        <text x="24" y="112" font-family="system-ui, sans-serif" font-size="12" fill="#d1d5db" font-weight="500">${this.truncate(lastTool, 12)}</text>
+        <text x="24" y="112" font-family="system-ui, sans-serif" font-size="12" fill="#d1d5db" font-weight="500">${escapeXml(this.truncate(lastTool, 12))}</text>
 
         <!-- Tool count -->
         <text x="120" y="95" font-family="system-ui, sans-serif" font-size="10" fill="#6b7280" text-anchor="end">CALLS</text>

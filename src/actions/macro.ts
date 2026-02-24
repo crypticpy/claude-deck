@@ -14,6 +14,7 @@ import {
   type BaseAgentAdapter,
 } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
+import { escapeXml } from "../utils/svg-utils.js";
 
 /**
  * Condition types for conditional execution
@@ -404,7 +405,7 @@ export class MacroAction extends SingletonAction {
         <rect width="144" height="144" fill="#0f172a" rx="12"/>
         <rect x="20" y="30" width="104" height="54" rx="10" fill="${color}" opacity="0.16"/>
         <rect x="20" y="30" width="104" height="54" rx="10" fill="none" stroke="${color}" stroke-width="3"/>
-        <text x="72" y="60" font-family="system-ui, sans-serif" font-size="16" fill="${color}" text-anchor="middle" font-weight="bold">${this.truncate(label, 10)}</text>
+        <text x="72" y="60" font-family="system-ui, sans-serif" font-size="16" fill="${color}" text-anchor="middle" font-weight="bold">${escapeXml(this.truncate(label, 10))}</text>
         <text x="72" y="80" font-family="monospace" font-size="10" fill="#94a3b8" text-anchor="middle">${stepCount} step${stepCount === 1 ? "" : "s"}${isMultiAgent ? " (multi)" : ""}</text>
         <text x="72" y="120" font-family="system-ui, sans-serif" font-size="11" fill="${color}" text-anchor="middle" font-weight="bold">MACRO</text>
       </svg>

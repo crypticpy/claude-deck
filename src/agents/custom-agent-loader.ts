@@ -397,7 +397,15 @@ export class CustomAgentAdapter extends BaseAgentAdapter {
    */
   getTitlePatterns(): RegExp[] {
     if (this.config.titlePatterns && this.config.titlePatterns.length > 0) {
-      return this.config.titlePatterns.map((p) => new RegExp(p, "i"));
+      return this.config.titlePatterns
+        .map((p) => {
+          try {
+            return new RegExp(p, "i");
+          } catch {
+            return null;
+          }
+        })
+        .filter((r): r is RegExp => r !== null);
     }
     // Default to matching the agent name or id
     return [new RegExp(this.name, "i"), new RegExp(this.id, "i")];
@@ -482,31 +490,53 @@ export async function loadCustomAgents(): Promise<CustomAgentAdapter[]> {
         continue;
       }
       if (!agentConfig.name || typeof agentConfig.name !== "string") {
-        console.warn(`custom-agents.json: agent '${agentConfig.id}' missing 'name' field, skipping`);
+        console.warn(
+          `custom-agents.json: agent '${agentConfig.id}' missing 'name' field, skipping`,
+        );
         continue;
       }
       if (!agentConfig.color || typeof agentConfig.color !== "string") {
-        console.warn(`custom-agents.json: agent '${agentConfig.id}' missing 'color' field, skipping`);
+        console.warn(
+          `custom-agents.json: agent '${agentConfig.id}' missing 'color' field, skipping`,
+        );
         continue;
       }
       if (!agentConfig.command || typeof agentConfig.command !== "string") {
-        console.warn(`custom-agents.json: agent '${agentConfig.id}' missing 'command' field, skipping`);
+        console.warn(
+          `custom-agents.json: agent '${agentConfig.id}' missing 'command' field, skipping`,
+        );
         continue;
       }
-      if (!agentConfig.processNames || !Array.isArray(agentConfig.processNames)) {
-        console.warn(`custom-agents.json: agent '${agentConfig.id}' missing 'processNames' field, skipping`);
+      if (
+        !agentConfig.processNames ||
+        !Array.isArray(agentConfig.processNames)
+      ) {
+        console.warn(
+          `custom-agents.json: agent '${agentConfig.id}' missing 'processNames' field, skipping`,
+        );
         continue;
       }
-      if (!agentConfig.capabilities || typeof agentConfig.capabilities !== "object") {
-        console.warn(`custom-agents.json: agent '${agentConfig.id}' missing 'capabilities' field, skipping`);
+      if (
+        !agentConfig.capabilities ||
+        typeof agentConfig.capabilities !== "object"
+      ) {
+        console.warn(
+          `custom-agents.json: agent '${agentConfig.id}' missing 'capabilities' field, skipping`,
+        );
         continue;
       }
 
       // Validate keybinding keys if present
       if (agentConfig.keybindings) {
         const invalidKeys: string[] = [];
-        for (const [action, keybinding] of Object.entries(agentConfig.keybindings)) {
-          if (keybinding && typeof keybinding === "object" && "key" in keybinding) {
+        for (const [action, keybinding] of Object.entries(
+          agentConfig.keybindings,
+        )) {
+          if (
+            keybinding &&
+            typeof keybinding === "object" &&
+            "key" in keybinding
+          ) {
             const key = (keybinding as CustomKeybinding).key.toLowerCase();
             if (!(key in KEY_CODES)) {
               invalidKeys.push(`${action}.key='${key}'`);
@@ -516,7 +546,7 @@ export async function loadCustomAgents(): Promise<CustomAgentAdapter[]> {
         if (invalidKeys.length > 0) {
           console.warn(
             `custom-agents.json: agent '${agentConfig.id}' has invalid keybindings: ${invalidKeys.join(", ")}. ` +
-              `Valid keys: ${Object.keys(KEY_CODES).join(", ")}`
+              `Valid keys: ${Object.keys(KEY_CODES).join(", ")}`,
           );
         }
       }
@@ -524,9 +554,14 @@ export async function loadCustomAgents(): Promise<CustomAgentAdapter[]> {
       try {
         const adapter = new CustomAgentAdapter(agentConfig);
         agents.push(adapter);
-        console.log(`Loaded custom agent: ${agentConfig.id} (${agentConfig.name})`);
+        console.log(
+          `Loaded custom agent: ${agentConfig.id} (${agentConfig.name})`,
+        );
       } catch (error) {
-        console.error(`Failed to create adapter for agent '${agentConfig.id}':`, error);
+        console.error(
+          `Failed to create adapter for agent '${agentConfig.id}':`,
+          error,
+        );
       }
     }
 
@@ -543,7 +578,7 @@ export async function loadCustomAgents(): Promise<CustomAgentAdapter[]> {
  * Returns patterns that can be used to detect custom agents in terminal windows.
  */
 export function getCustomAgentPatterns(
-  agents: CustomAgentAdapter[]
+  agents: CustomAgentAdapter[],
 ): Array<{ id: string; processNames: string[]; titlePatterns: RegExp[] }> {
   return agents.map((agent) => ({
     id: agent.id,
