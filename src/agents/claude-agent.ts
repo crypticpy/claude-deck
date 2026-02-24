@@ -7,7 +7,15 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile, writeFile, mkdir, rename, stat } from "node:fs/promises";
+import {
+  readFile,
+  writeFile,
+  mkdir,
+  rename,
+  stat,
+  readdir,
+  unlink,
+} from "node:fs/promises";
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -87,6 +95,7 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
 
   private configDir: string;
   private statePath: string;
+  private sessionsDir: string;
   private commandPath: string;
   private configPath: string;
   private currentState: AgentState;
@@ -98,11 +107,13 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
   private lastEmittedUpdatedAt = 0;
   private transcriptEnrichAt = 0;
   private transcriptEnrichInFlight?: Promise<void>;
+  private cleanupTick = 0;
 
   constructor() {
     super();
     this.configDir = join(homedir(), ".claude-deck");
     this.statePath = join(this.configDir, "state.json");
+    this.sessionsDir = join(this.configDir, "sessions");
     this.commandPath = join(this.configDir, "commands.json");
     this.configPath = join(this.configDir, "config.json");
     this.currentState = this.getDefaultState();
@@ -140,6 +151,11 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
     // Ensure config directory exists
     if (!existsSync(this.configDir)) {
       await mkdir(this.configDir, { recursive: true });
+    }
+
+    // Ensure sessions directory exists for per-session state files
+    if (!existsSync(this.sessionsDir)) {
+      await mkdir(this.sessionsDir, { recursive: true });
     }
 
     // Load configuration
@@ -257,7 +273,8 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
 
   async refreshState(): Promise<AgentState> {
     try {
-      const content = await readFile(this.statePath, "utf-8");
+      const sessionFile = await this.findActiveSessionFile();
+      const content = await readFile(sessionFile, "utf-8");
       const fileState = JSON.parse(content);
 
       // Save previous session start time before overwriting state
@@ -349,12 +366,14 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
 
     try {
       this.stateWatcher?.close();
-      // Watch the DIRECTORY instead of the file.  The state file is written
-      // atomically via rename, which invalidates the inode that
-      // fs.watch(file) was tracking.  Watching the directory survives atomic
-      // renames because the directory inode never changes.
-      this.stateWatcher = watch(this.configDir, (_eventType, filename) => {
-        if (filename === "state.json" || filename === null) {
+      // Prefer watching sessions dir for per-session state files; fall back
+      // to config dir (for state.json backward compat) if sessions dir
+      // doesn't exist yet.
+      const watchDir = existsSync(this.sessionsDir)
+        ? this.sessionsDir
+        : this.configDir;
+      this.stateWatcher = watch(watchDir, (_eventType, filename) => {
+        if (!filename || filename.endsWith(".json")) {
           scheduleRefresh();
         }
       });
@@ -367,7 +386,13 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
     if (!this.statePoller) {
       // NOTE: For non-Claude agents, polling should ideally be demand-driven
       // (only when action buttons are visible on the Stream Deck).
-      this.statePoller = setInterval(scheduleRefresh, 1500);
+      this.statePoller = setInterval(() => {
+        scheduleRefresh();
+        // Periodically clean up session files for dead processes
+        if (++this.cleanupTick % 10 === 0) {
+          void this.cleanupStaleSessions();
+        }
+      }, 1500);
     }
   }
 
@@ -440,6 +465,64 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
   // ============================================
   // Private Helpers
   // ============================================
+
+  /**
+   * Find the most recently updated session file in the sessions directory.
+   * Falls back to the global state.json if no session files exist.
+   */
+  private async findActiveSessionFile(): Promise<string> {
+    try {
+      const files = await readdir(this.sessionsDir);
+      const jsonFiles = files.filter((f) => f.endsWith(".json"));
+      if (jsonFiles.length === 0) return this.statePath;
+
+      let newestFile = this.statePath;
+      let newestMtime = 0;
+
+      for (const f of jsonFiles) {
+        const fullPath = join(this.sessionsDir, f);
+        try {
+          const s = await stat(fullPath);
+          if (s.mtimeMs > newestMtime) {
+            newestMtime = s.mtimeMs;
+            newestFile = fullPath;
+          }
+        } catch {
+          /* skip */
+        }
+      }
+
+      return newestFile;
+    } catch {
+      return this.statePath;
+    }
+  }
+
+  /**
+   * Remove session files for processes that are no longer alive.
+   */
+  private async cleanupStaleSessions(): Promise<void> {
+    try {
+      const files = await readdir(this.sessionsDir);
+      for (const f of files) {
+        if (!f.endsWith(".json")) continue;
+        const pid = parseInt(f.replace(".json", ""), 10);
+        if (isNaN(pid)) continue;
+        try {
+          process.kill(pid, 0); // Check if alive — throws if dead
+        } catch {
+          // Process is dead, remove stale session file
+          try {
+            await unlink(join(this.sessionsDir, f));
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 
   private async loadConfig(): Promise<void> {
     try {

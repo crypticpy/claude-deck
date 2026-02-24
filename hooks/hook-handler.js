@@ -33,6 +33,7 @@ const os = require("node:os");
 
 const STATE_DIR = path.join(os.homedir(), ".claude-deck");
 const STATE_FILE = path.join(STATE_DIR, "state.json");
+const SESSIONS_DIR = path.join(STATE_DIR, "sessions");
 const STATE_PERMS = 0o600;
 const LOCK_FILE = STATE_FILE + ".lock";
 const LOCK_TIMEOUT_MS = 2000;
@@ -83,9 +84,12 @@ function releaseLock() {
 // Safety timeout — if stdin never closes, exit after 5 seconds
 const STDIN_TIMEOUT_MS = 5000;
 
-// Ensure state directory exists
+// Ensure state directory and sessions subdirectory exist
 if (!fs.existsSync(STATE_DIR)) {
   fs.mkdirSync(STATE_DIR, { recursive: true });
+}
+if (!fs.existsSync(SESSIONS_DIR)) {
+  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
 
 // Default state shape
@@ -149,6 +153,57 @@ function writeState(state) {
       /* ignore */
     }
     throw e;
+  }
+}
+
+/**
+ * Get the session-specific state file path keyed by the parent PID
+ * (the Claude Code process that invoked this hook).
+ */
+function getSessionFile() {
+  return path.join(SESSIONS_DIR, `${process.ppid}.json`);
+}
+
+/**
+ * Read per-session state from disk, merging with defaults for any missing keys.
+ */
+function readSessionState() {
+  const sessionFile = getSessionFile();
+  try {
+    if (fs.existsSync(sessionFile)) {
+      const content = fs.readFileSync(sessionFile, "utf-8");
+      return { ...DEFAULT_STATE, ...JSON.parse(content) };
+    }
+  } catch (e) {
+    process.stderr.write(
+      `[claude-deck] Error reading session state: ${e.message}\n`,
+    );
+  }
+  return { ...DEFAULT_STATE };
+}
+
+/**
+ * Write per-session state atomically: write to a .tmp file, then rename.
+ */
+function writeSessionState(state) {
+  state.lastUpdated = new Date().toISOString();
+  state.claudePid = process.ppid;
+  const sessionFile = getSessionFile();
+  const tmpFile = `${sessionFile}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tmpFile, JSON.stringify(state, null, 2), {
+      mode: STATE_PERMS,
+    });
+    fs.renameSync(tmpFile, sessionFile);
+  } catch (e) {
+    try {
+      fs.unlinkSync(tmpFile);
+    } catch (_) {
+      /* ignore */
+    }
+    process.stderr.write(
+      `[claude-deck] Error writing session state: ${e.message}\n`,
+    );
   }
 }
 
@@ -311,11 +366,13 @@ async function main() {
     const raw = await readStdin();
     const data = parseInput(raw);
 
-    // Read current state, apply event, write back (with file locking)
+    // Read per-session state, apply event, write back (with file locking)
     const locked = acquireLock();
     try {
-      const state = readState();
+      const state = readSessionState();
       handleEvent(hookType, data, state);
+      writeSessionState(state);
+      // Also write to state.json as the "active" session for backward compat
       writeState(state);
     } finally {
       if (locked) releaseLock();
