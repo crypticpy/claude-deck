@@ -37,14 +37,11 @@ interface AgentBadgeSettings {
  */
 interface ButtonState {
   settings: AgentBadgeSettings;
-  updateInterval?: ReturnType<typeof setInterval>;
-  stateHandler?: (state: unknown) => void;
-  activeChangeHandler?: (agentId: string | null, previousId: string | null) => void;
   longPressTimer?: ReturnType<typeof setTimeout>;
   pulseTimer?: ReturnType<typeof setTimeout>;
   keyDownTime: number;
-  isPulsing: boolean; // Track pulse animation state
-  ev?: WillAppearEvent; // Store event for updates
+  isPulsing: boolean;
+  ev: WillAppearEvent;
 }
 
 /**
@@ -58,6 +55,14 @@ export class AgentBadgeAction extends SingletonAction {
   // Track agents currently being spawned to prevent race conditions
   private spawningAgents = new Set<string>();
 
+  // Shared handlers - created on first appear, removed on last disappear
+  private stateHandler?: () => void;
+  private activeChangeHandler?: (
+    agentId: string | null,
+    previousId: string | null,
+  ) => void;
+  private sharedInterval?: ReturnType<typeof setInterval>;
+
   constructor() {
     super();
   }
@@ -65,46 +70,57 @@ export class AgentBadgeAction extends SingletonAction {
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     const actionId = ev.action.id;
     const settings = (ev.payload.settings as AgentBadgeSettings) || {};
-    const agentId = this.validateAgentId(settings.agentId);
-
-    // Create state handler for this specific button
-    const stateHandler = () => {
-      void this.updateDisplay(ev, agentId, false);
-    };
-
-    // Create active change handler for pulse animation
-    const activeChangeHandler = (newAgentId: string | null, _previousId: string | null) => {
-      if (newAgentId === agentId) {
-        // This agent just became active - trigger pulse
-        void this.triggerPulseAnimation(actionId, ev, agentId);
-      }
-    };
-
-    // Create update interval for this button
-    const updateInterval = setInterval(() => {
-      void this.updateDisplay(ev, agentId, false);
-    }, 1000);
 
     // Store per-button state
     this.buttonStates.set(actionId, {
       settings,
-      updateInterval,
-      stateHandler,
-      activeChangeHandler,
       keyDownTime: 0,
       isPulsing: false,
       ev,
     });
 
-    // Listen for state changes
-    stateAggregator.on("stateChange", stateHandler);
-    stateAggregator.on("activeAgentChange", activeChangeHandler);
+    // Set up shared handlers on first button appearance
+    if (!this.stateHandler) {
+      this.stateHandler = () => {
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      };
+      stateAggregator.on("stateChange", this.stateHandler);
+    }
+
+    if (!this.activeChangeHandler) {
+      this.activeChangeHandler = (
+        newAgentId: string | null,
+        _previousId: string | null,
+      ) => {
+        // Trigger pulse animation on the button matching the newly active agent
+        for (const [id, state] of this.buttonStates) {
+          const agentId = this.validateAgentId(state.settings.agentId);
+          if (newAgentId === agentId) {
+            void this.triggerPulseAnimation(id, state.ev, agentId);
+          }
+        }
+      };
+      stateAggregator.on("activeAgentChange", this.activeChangeHandler);
+    }
+
+    if (!this.sharedInterval) {
+      this.sharedInterval = setInterval(() => {
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      }, 1000);
+    }
 
     // Initial display update
+    const agentId = this.validateAgentId(settings.agentId);
     await this.updateDisplay(ev, agentId, false);
   }
 
-  override async onDidReceiveSettings(ev: DidReceiveSettingsEvent): Promise<void> {
+  override async onDidReceiveSettings(
+    ev: DidReceiveSettingsEvent,
+  ): Promise<void> {
     const actionId = ev.action.id;
     const buttonState = this.buttonStates.get(actionId);
     if (buttonState) {
@@ -117,21 +133,6 @@ export class AgentBadgeAction extends SingletonAction {
     const buttonState = this.buttonStates.get(actionId);
 
     if (buttonState) {
-      // Clean up state handler
-      if (buttonState.stateHandler) {
-        stateAggregator.removeListener("stateChange", buttonState.stateHandler);
-      }
-
-      // Clean up active change handler
-      if (buttonState.activeChangeHandler) {
-        stateAggregator.removeListener("activeAgentChange", buttonState.activeChangeHandler);
-      }
-
-      // Clean up interval
-      if (buttonState.updateInterval) {
-        clearInterval(buttonState.updateInterval);
-      }
-
       // Clean up long press timer
       if (buttonState.longPressTimer) {
         clearTimeout(buttonState.longPressTimer);
@@ -145,6 +146,25 @@ export class AgentBadgeAction extends SingletonAction {
       // Remove from tracking
       this.buttonStates.delete(actionId);
     }
+
+    // Tear down shared resources when last button disappears
+    if (this.buttonStates.size === 0) {
+      if (this.stateHandler) {
+        stateAggregator.removeListener("stateChange", this.stateHandler);
+        this.stateHandler = undefined;
+      }
+      if (this.activeChangeHandler) {
+        stateAggregator.removeListener(
+          "activeAgentChange",
+          this.activeChangeHandler,
+        );
+        this.activeChangeHandler = undefined;
+      }
+      if (this.sharedInterval) {
+        clearInterval(this.sharedInterval);
+        this.sharedInterval = undefined;
+      }
+    }
   }
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
@@ -154,7 +174,9 @@ export class AgentBadgeAction extends SingletonAction {
 
     buttonState.keyDownTime = Date.now();
     const agentId = this.validateAgentId(buttonState.settings.agentId);
-    const longPressDuration = this.validateLongPressDuration(buttonState.settings.longPressDuration);
+    const longPressDuration = this.validateLongPressDuration(
+      buttonState.settings.longPressDuration,
+    );
 
     // Clear any existing timer
     if (buttonState.longPressTimer) {
@@ -186,7 +208,9 @@ export class AgentBadgeAction extends SingletonAction {
 
     const pressDuration = Date.now() - buttonState.keyDownTime;
     const agentId = this.validateAgentId(buttonState.settings.agentId);
-    const longPressDuration = this.validateLongPressDuration(buttonState.settings.longPressDuration);
+    const longPressDuration = this.validateLongPressDuration(
+      buttonState.settings.longPressDuration,
+    );
 
     // Clear long press timer
     if (buttonState.longPressTimer) {
@@ -230,12 +254,25 @@ export class AgentBadgeAction extends SingletonAction {
   }
 
   /**
+   * Update all active buttons
+   */
+  private async updateAll(): Promise<void> {
+    if (this.buttonStates.size === 0) return;
+    await Promise.allSettled(
+      [...this.buttonStates.entries()].map(([_actionId, state]) => {
+        const agentId = this.validateAgentId(state.settings.agentId);
+        return this.updateDisplay(state.ev, agentId, state.isPulsing);
+      }),
+    );
+  }
+
+  /**
    * Trigger a pulse animation when this agent becomes active
    */
   private async triggerPulseAnimation(
     actionId: string,
     ev: WillAppearEvent,
-    agentId: string
+    agentId: string,
   ): Promise<void> {
     const buttonState = this.buttonStates.get(actionId);
     if (!buttonState) return;
@@ -256,7 +293,11 @@ export class AgentBadgeAction extends SingletonAction {
     }, 800);
   }
 
-  private async updateDisplay(ev: WillAppearEvent, agentId: string, isPulsing: boolean): Promise<void> {
+  private async updateDisplay(
+    ev: WillAppearEvent,
+    agentId: string,
+    isPulsing: boolean,
+  ): Promise<void> {
     const agent = stateAggregator.getAgent(agentId);
     const state = stateAggregator.getAgentState(agentId);
     const isActive = stateAggregator.getActiveAgentId() === agentId;
@@ -267,7 +308,10 @@ export class AgentBadgeAction extends SingletonAction {
     }
 
     // Get agent color
-    const agentColor = AGENT_COLORS[agentId] ?? { primary: "#888888", muted: "#444444" };
+    const agentColor = AGENT_COLORS[agentId] ?? {
+      primary: "#888888",
+      muted: "#444444",
+    };
     const statusColor = STATUS_COLORS[state.status] ?? STATUS_COLORS.idle;
 
     // Build title with status indicator
@@ -277,7 +321,15 @@ export class AgentBadgeAction extends SingletonAction {
     await ev.action.setTitle(title);
 
     // Set image with appropriate styling based on state
-    await this.setAgentImage(ev, agentId, state, isActive, agentColor.primary, statusColor, isPulsing);
+    await this.setAgentImage(
+      ev,
+      agentId,
+      state,
+      isActive,
+      agentColor.primary,
+      statusColor,
+      isPulsing,
+    );
   }
 
   private getStatusIndicator(state: AgentState, isActive: boolean): string {
@@ -305,7 +357,7 @@ export class AgentBadgeAction extends SingletonAction {
     isActive: boolean,
     agentColor: string,
     statusColor: string,
-    isPulsing: boolean
+    isPulsing: boolean,
   ): Promise<void> {
     // Create SVG badge dynamically
     const opacity = state.status === "disconnected" ? 0.4 : 1.0;
@@ -316,7 +368,9 @@ export class AgentBadgeAction extends SingletonAction {
 
     // Glow filter for active state
     if (isActive && state.status !== "disconnected") {
-      defs.push(`<filter id="glow"><feGaussianBlur stdDeviation="3" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`);
+      defs.push(
+        `<filter id="glow"><feGaussianBlur stdDeviation="3" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`,
+      );
     }
 
     // Pulse animation when becoming active
@@ -336,7 +390,8 @@ export class AgentBadgeAction extends SingletonAction {
       `);
     }
 
-    const filterAttr = isActive && state.status !== "disconnected" ? 'filter="url(#glow)"' : "";
+    const filterAttr =
+      isActive && state.status !== "disconnected" ? 'filter="url(#glow)"' : "";
     const pulseClass = isPulsing ? 'class="pulse-ring"' : "";
 
     // Agent initials

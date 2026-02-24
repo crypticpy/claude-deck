@@ -76,10 +76,14 @@ export class ContextBarAction extends SingletonAction {
   }
 
   private createBarSvg(state: AgentState | undefined): string {
-    const percent = Math.min(100, Math.round(state?.contextPercent ?? 0));
-    const contextSize = 200000; // Default context window
-    const used = Math.round((percent / 100) * contextSize);
-    const total = contextSize;
+    const total = state?.contextSize || 200000;
+    const used = state?.contextUsed || 0;
+    const percent =
+      state?.contextPercent != null
+        ? Math.min(100, Math.round(state.contextPercent))
+        : total > 0
+          ? Math.min(100, Math.round((used / total) * 100))
+          : 0;
 
     const barColor = this.getBarColor(percent);
     const barWidth = Math.min(100, percent);

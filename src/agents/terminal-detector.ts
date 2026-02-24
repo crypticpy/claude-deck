@@ -32,7 +32,7 @@ export interface TerminalWindow {
 /**
  * Agent process detection patterns
  */
-interface AgentPattern {
+export interface AgentPattern {
   id: string;
   /** Process names to look for */
   processNames: string[];
@@ -41,9 +41,9 @@ interface AgentPattern {
 }
 
 /**
- * Known agent detection patterns
+ * Known agent detection patterns (defaults)
  */
-const AGENT_PATTERNS: AgentPattern[] = [
+const DEFAULT_AGENT_PATTERNS: AgentPattern[] = [
   {
     id: "claude",
     processNames: ["claude"],
@@ -98,6 +98,17 @@ export class TerminalDetector extends EventEmitter {
   private pollInterval?: ReturnType<typeof setInterval>;
   private lastFocusedApp: string | null = null;
   private lastFocusedAgentId: string | null = null;
+  private patterns: AgentPattern[] = [...DEFAULT_AGENT_PATTERNS];
+
+  /**
+   * Register an additional agent pattern for terminal detection.
+   * Avoids duplicates by checking agentId (pattern.id).
+   */
+  registerAgentPattern(pattern: AgentPattern): void {
+    if (!this.patterns.find((p) => p.id === pattern.id)) {
+      this.patterns.push(pattern);
+    }
+  }
 
   /**
    * Get the frontmost application name
@@ -205,7 +216,7 @@ export class TerminalDetector extends EventEmitter {
    * Detect which agent is running based on window title
    */
   async detectAgentFromTitle(title: string): Promise<string | null> {
-    for (const pattern of AGENT_PATTERNS) {
+    for (const pattern of this.patterns) {
       for (const regex of pattern.titlePatterns) {
         if (regex.test(title)) {
           return pattern.id;
@@ -220,7 +231,7 @@ export class TerminalDetector extends EventEmitter {
    * More accurate but more expensive than title matching
    */
   async detectAgentByProcess(): Promise<string | null> {
-    for (const pattern of AGENT_PATTERNS) {
+    for (const pattern of this.patterns) {
       for (const processName of pattern.processNames) {
         try {
           await execFileAsync("pgrep", ["-x", processName]);
@@ -239,7 +250,7 @@ export class TerminalDetector extends EventEmitter {
    */
   async getRunningAgents(): Promise<string[]> {
     const running: string[] = [];
-    for (const pattern of AGENT_PATTERNS) {
+    for (const pattern of this.patterns) {
       for (const processName of pattern.processNames) {
         try {
           await execFileAsync("pgrep", ["-x", processName]);

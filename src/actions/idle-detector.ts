@@ -3,7 +3,11 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
 
 /**
  * Idle Detector Action - Shows when Claude is waiting for input
@@ -12,18 +16,27 @@ export class IdleDetectorAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.idle-detector";
 
   private activeActions = new Map<string, WillAppearEvent["action"]>();
-  private updateHandler?: (state: AgentState) => void;
+  private updateHandler?: (state: AggregatedState) => void;
   private refreshInterval?: ReturnType<typeof setInterval>;
   private pulseFrame = 0;
   private currentStatus: string = "disconnected";
+
+  private getActiveAgentState(): AgentState | undefined {
+    const activeId = stateAggregator.getActiveAgentId();
+    if (activeId) {
+      return stateAggregator.getAgentState(activeId);
+    }
+    return undefined;
+  }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
 
     if (!this.updateHandler) {
-      this.updateHandler = (state: AgentState) => {
-        const newStatus = state.status || "disconnected";
+      this.updateHandler = () => {
+        const agentState = this.getActiveAgentState();
+        const newStatus = agentState?.status || "disconnected";
         if (newStatus !== this.currentStatus) {
           this.currentStatus = newStatus;
           this.adjustInterval();
@@ -32,17 +45,17 @@ export class IdleDetectorAction extends SingletonAction {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.updateHandler);
     }
 
-    this.currentStatus = claudeAgent.getState().status || "disconnected";
+    this.currentStatus = this.getActiveAgentState()?.status || "disconnected";
     this.adjustInterval();
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
     if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
+      stateAggregator.removeListener("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
     if (this.activeActions.size === 0) {
@@ -93,18 +106,18 @@ export class IdleDetectorAction extends SingletonAction {
   private async updateDisplay(
     action: WillAppearEvent["action"],
   ): Promise<void> {
-    const state = claudeAgent.getState();
+    const state = this.getActiveAgentState();
     const svg = this.createIdleSvg(state);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
 
-  private createIdleSvg(state: AgentState): string {
-    const status = state.status || "idle";
+  private createIdleSvg(state: AgentState | undefined): string {
+    const status = state?.status || "idle";
     const isWaiting = status === "waiting" || status === "idle";
     const isWorking = status === "working";
 
     // Calculate idle time
-    const lastActivity = state.lastActivityTime
+    const lastActivity = state?.lastActivityTime
       ? new Date(state.lastActivityTime).getTime()
       : Date.now();
     const idleSeconds = Math.floor((Date.now() - lastActivity) / 1000);
@@ -152,34 +165,34 @@ export class IdleDetectorAction extends SingletonAction {
         ${
           icon === "zzz"
             ? `
-          <text x="72" y="55" font-family="system-ui" font-size="16" fill="${statusColor}" text-anchor="middle">Z</text>
-          <text x="80" y="48" font-family="system-ui" font-size="12" fill="${statusColor}" opacity="0.7">z</text>
-          <text x="86" y="43" font-family="system-ui" font-size="10" fill="${statusColor}" opacity="0.5">z</text>
+          <text x="72" y="55" font-family="system-ui, sans-serif" font-size="16" fill="${statusColor}" text-anchor="middle">Z</text>
+          <text x="80" y="48" font-family="system-ui, sans-serif" font-size="12" fill="${statusColor}" opacity="0.7">z</text>
+          <text x="86" y="43" font-family="system-ui, sans-serif" font-size="10" fill="${statusColor}" opacity="0.5">z</text>
         `
             : icon === "wait"
               ? `
-          <text x="72" y="68" font-family="system-ui" font-size="28" fill="${statusColor}" text-anchor="middle">?</text>
+          <text x="72" y="68" font-family="system-ui, sans-serif" font-size="28" fill="${statusColor}" text-anchor="middle">?</text>
         `
               : icon === "active"
                 ? `
           <circle cx="72" cy="60" r="12" fill="${statusColor}"/>
         `
                 : `
-          <text x="72" y="68" font-family="system-ui" font-size="28" fill="${statusColor}" text-anchor="middle">!</text>
+          <text x="72" y="68" font-family="system-ui, sans-serif" font-size="28" fill="${statusColor}" text-anchor="middle">!</text>
         `
         }
 
         <!-- Status -->
-        <text x="72" y="105" font-family="system-ui" font-size="12" fill="${statusColor}" text-anchor="middle" font-weight="bold">${statusText}</text>
+        <text x="72" y="105" font-family="system-ui, sans-serif" font-size="12" fill="${statusColor}" text-anchor="middle" font-weight="bold">${statusText}</text>
 
         <!-- Idle time -->
         ${
           !isWorking
             ? `
-          <text x="72" y="125" font-family="system-ui" font-size="11" fill="#64748b" text-anchor="middle">${idleDisplay} idle</text>
+          <text x="72" y="125" font-family="system-ui, sans-serif" font-size="11" fill="#64748b" text-anchor="middle">${idleDisplay} idle</text>
         `
             : `
-          <text x="72" y="125" font-family="system-ui" font-size="11" fill="#64748b" text-anchor="middle">Working...</text>
+          <text x="72" y="125" font-family="system-ui, sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Working...</text>
         `
         }
       </svg>

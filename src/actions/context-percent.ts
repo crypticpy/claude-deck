@@ -3,7 +3,11 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
 
 /**
  * Context Percent Action - Shows context window usage as a large percentage
@@ -11,12 +15,20 @@ import { claudeAgent, type AgentState } from "../agents/index.js";
 export class ContextPercentAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.context-percent";
 
-  private updateHandler?: (state: AgentState) => void;
+  private updateHandler?: (state: AggregatedState) => void;
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   private refreshInterval?: ReturnType<typeof setInterval>;
 
   constructor() {
     super();
+  }
+
+  private getActiveAgentState(): AgentState | undefined {
+    const activeId = stateAggregator.getActiveAgentId();
+    if (activeId) {
+      return stateAggregator.getAgentState(activeId);
+    }
+    return undefined;
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
@@ -29,7 +41,7 @@ export class ContextPercentAction extends SingletonAction {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.updateHandler);
     }
 
     if (!this.refreshInterval) {
@@ -44,7 +56,7 @@ export class ContextPercentAction extends SingletonAction {
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
     if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
+      stateAggregator.removeListener("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
     if (this.activeActions.size === 0 && this.refreshInterval) {
@@ -65,7 +77,7 @@ export class ContextPercentAction extends SingletonAction {
   private async updateDisplay(
     action: WillAppearEvent["action"],
   ): Promise<void> {
-    const state = claudeAgent.getState();
+    const state = this.getActiveAgentState();
     const svg = this.createPercentSvg(state);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
@@ -77,8 +89,8 @@ export class ContextPercentAction extends SingletonAction {
     return "#ef4444"; // Red
   }
 
-  private createPercentSvg(state: AgentState): string {
-    const percent = state.contextPercent || 0;
+  private createPercentSvg(state: AgentState | undefined): string {
+    const percent = state?.contextPercent || 0;
     const color = this.getColor(percent);
 
     // Create a circular progress indicator

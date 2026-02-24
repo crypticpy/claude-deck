@@ -7,9 +7,9 @@ import streamDeck, {
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
 import {
-  claudeAgent,
   stateAggregator,
   type AgentState,
+  type AggregatedState,
 } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
 import { escapeXml } from "../utils/svg-utils.js";
@@ -30,7 +30,7 @@ type CostBudgetPiMessage = { type: "refresh" };
 export class CostDisplayAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.cost-display";
 
-  private updateHandler?: (state: AgentState) => void;
+  private updateHandler?: (state: AggregatedState) => void;
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   private settingsById = new Map<string, CostBudgetSettings>();
   private refreshInterval?: ReturnType<typeof setInterval>;
@@ -49,24 +49,40 @@ export class CostDisplayAction extends SingletonAction {
     super();
   }
 
+  private getActiveAgentState(): AgentState | undefined {
+    const activeId = stateAggregator.getActiveAgentId();
+    if (activeId) {
+      return stateAggregator.getAgentState(activeId);
+    }
+    return undefined;
+  }
+
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
     this.settingsById.set(
       ev.action.id,
       (ev.payload.settings as CostBudgetSettings) ?? {},
     );
-    await this.updateDisplay(ev.action, claudeAgent.getState());
+    const state = this.getActiveAgentState();
+    await this.updateDisplay(ev.action, state);
 
     if (!this.updateHandler) {
-      this.updateHandler = (state: AgentState) => {
-        void this.maybeAutoSwitchModel(state).catch(() => {
-          // ignore
-        });
-        void this.updateAllWithState(state).catch(() => {
-          // ignore
-        });
+      this.updateHandler = () => {
+        const agentState = this.getActiveAgentState();
+        if (agentState) {
+          void this.maybeAutoSwitchModel(agentState).catch(() => {
+            // ignore
+          });
+          void this.updateAllWithState(agentState).catch(() => {
+            // ignore
+          });
+        } else {
+          void this.updateAll().catch(() => {
+            // ignore
+          });
+        }
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.updateHandler);
     }
 
     if (!this.refreshInterval) {
@@ -82,7 +98,7 @@ export class CostDisplayAction extends SingletonAction {
     this.activeActions.delete(ev.action.id);
     this.settingsById.delete(ev.action.id);
     if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
+      stateAggregator.removeListener("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
     if (this.activeActions.size === 0 && this.refreshInterval) {
@@ -93,7 +109,8 @@ export class CostDisplayAction extends SingletonAction {
 
   private async updateAll(): Promise<void> {
     if (this.activeActions.size === 0) return;
-    await this.updateAllWithState(claudeAgent.getState());
+    const state = this.getActiveAgentState();
+    await this.updateAllWithState(state);
   }
 
   override async onDidReceiveSettings(
@@ -103,7 +120,7 @@ export class CostDisplayAction extends SingletonAction {
       ev.action.id,
       (ev.payload.settings as CostBudgetSettings) ?? {},
     );
-    await this.updateDisplay(ev.action, claudeAgent.getState());
+    await this.updateDisplay(ev.action, this.getActiveAgentState());
   }
 
   override async onPropertyInspectorDidAppear(
@@ -134,7 +151,9 @@ export class CostDisplayAction extends SingletonAction {
     };
   }
 
-  private async updateAllWithState(state: AgentState): Promise<void> {
+  private async updateAllWithState(
+    state: AgentState | undefined,
+  ): Promise<void> {
     await Promise.allSettled(
       [...this.activeActions.values()].map((action) =>
         this.updateDisplay(action, state),
@@ -144,14 +163,15 @@ export class CostDisplayAction extends SingletonAction {
 
   private async updateDisplay(
     action: WillAppearEvent["action"],
-    state: AgentState,
+    state: AgentState | undefined,
   ): Promise<void> {
     const settings = this.getSettings(action.id);
     const svg = this.createCostSvg(state, settings);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
 
-  private getCost(state: AgentState): number {
+  private getCost(state: AgentState | undefined): number {
+    if (!state) return 0;
     // Use actual session cost from Claude's context stats if available
     if (state.cost !== undefined && state.cost > 0) {
       return state.cost;
@@ -173,11 +193,11 @@ export class CostDisplayAction extends SingletonAction {
   }
 
   private createCostSvg(
-    state: AgentState,
+    state: AgentState | undefined,
     settings: CostBudgetSettings,
   ): string {
     const total = this.getCost(state);
-    const tokens = state.tokens || { input: 0, output: 0 };
+    const tokens = state?.tokens || { input: 0, output: 0 };
     const totalTokens = tokens.input + tokens.output;
     const budget = settings.budgetUsd;
 
@@ -222,7 +242,7 @@ export class CostDisplayAction extends SingletonAction {
         }
 
         <!-- Model indicator -->
-        <text x="72" y="125" font-family="system-ui, sans-serif" font-size="11" fill="#475569" text-anchor="middle">${escapeXml((state.model || "sonnet").toUpperCase())}</text>
+        <text x="72" y="125" font-family="system-ui, sans-serif" font-size="11" fill="#475569" text-anchor="middle">${escapeXml((state?.model || "sonnet").toUpperCase())}</text>
       </svg>
     `;
   }
@@ -254,7 +274,9 @@ export class CostDisplayAction extends SingletonAction {
     if (this.lastAutoSwitchedSessionKey === sessionKey) return;
     if (this.autoSwitchInFlight) return;
 
-    const focused = await claudeAgent.isTerminalFocused();
+    const activeAgent = stateAggregator.getActiveAgent();
+    if (!activeAgent) return;
+    const focused = await activeAgent.isTerminalFocused();
     if (!focused) return;
 
     this.autoSwitchInFlight = true;

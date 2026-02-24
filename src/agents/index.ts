@@ -14,7 +14,10 @@ import { geminiAgent } from "./gemini-agent.js";
 import { opencodeAgent } from "./opencode-agent.js";
 import { stateAggregator } from "./state-aggregator.js";
 import { terminalDetector } from "./terminal-detector.js";
-import { loadCustomAgents } from "./custom-agent-loader.js";
+import {
+  loadCustomAgents,
+  getCustomAgentPatterns,
+} from "./custom-agent-loader.js";
 
 // Base types and classes
 export {
@@ -50,6 +53,7 @@ export {
   TerminalDetector,
   terminalDetector,
   type TerminalWindow,
+  type AgentPattern,
 } from "./terminal-detector.js";
 
 // State aggregation
@@ -122,6 +126,12 @@ export async function initializeDefaultAgents(): Promise<void> {
     }
     if (customAgents.length > 0) {
       console.log(`Loaded ${customAgents.length} custom agent(s)`);
+
+      // Register custom agent patterns with the terminal detector
+      const patterns = getCustomAgentPatterns(customAgents);
+      for (const pattern of patterns) {
+        terminalDetector.registerAgentPattern(pattern);
+      }
     }
   } catch (error) {
     console.error("Failed to load custom agents:", error);

@@ -3,7 +3,11 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
 
 /**
  * Session Timer Action - Shows how long the current session has been running
@@ -11,12 +15,20 @@ import { claudeAgent, type AgentState } from "../agents/index.js";
 export class SessionTimerAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.session-timer";
 
-  private updateHandler?: (state: AgentState) => void;
+  private updateHandler?: (state: AggregatedState) => void;
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   private refreshInterval?: ReturnType<typeof setInterval>;
 
   constructor() {
     super();
+  }
+
+  private getActiveAgentState(): AgentState | undefined {
+    const activeId = stateAggregator.getActiveAgentId();
+    if (activeId) {
+      return stateAggregator.getAgentState(activeId);
+    }
+    return undefined;
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
@@ -29,7 +41,7 @@ export class SessionTimerAction extends SingletonAction {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.updateHandler);
     }
 
     // Update every second for live timer
@@ -45,7 +57,7 @@ export class SessionTimerAction extends SingletonAction {
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
     if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
+      stateAggregator.removeListener("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
     if (this.activeActions.size === 0 && this.refreshInterval) {
@@ -66,7 +78,7 @@ export class SessionTimerAction extends SingletonAction {
   private async updateDisplay(
     action: WillAppearEvent["action"],
   ): Promise<void> {
-    const state = claudeAgent.getState();
+    const state = this.getActiveAgentState();
     const svg = this.createTimerSvg(state);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
@@ -88,15 +100,15 @@ export class SessionTimerAction extends SingletonAction {
     };
   }
 
-  private createTimerSvg(state: AgentState): string {
+  private createTimerSvg(state: AgentState | undefined): string {
     let duration = 0;
-    if (state.sessionStartTime) {
+    if (state?.sessionStartTime) {
       const start = new Date(state.sessionStartTime).getTime();
       duration = Date.now() - start;
     }
 
     const { hours, minutes, seconds } = this.formatDuration(duration);
-    const isActive = state.status !== "disconnected";
+    const isActive = !!state && state.status !== "disconnected";
 
     // Color based on duration
     let timerColor = "#22c55e"; // Green < 1 hour

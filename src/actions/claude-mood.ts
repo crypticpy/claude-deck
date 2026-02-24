@@ -148,8 +148,8 @@ export class ClaudeMoodAction extends SingletonAction {
         }
 
         <!-- Label -->
-        <text x="72" y="118" font-family="system-ui" font-size="12" fill="${faceColor}" text-anchor="middle" font-weight="bold">${label}</text>
-        <text x="72" y="132" font-family="system-ui" font-size="9" fill="#64748b" text-anchor="middle">Claude</text>
+        <text x="72" y="118" font-family="system-ui, sans-serif" font-size="12" fill="${faceColor}" text-anchor="middle" font-weight="bold">${label}</text>
+        <text x="72" y="132" font-family="system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Claude</text>
       </svg>
     `;
   }

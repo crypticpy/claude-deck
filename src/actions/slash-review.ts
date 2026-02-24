@@ -9,6 +9,7 @@ export class SlashReviewAction extends SingletonAction {
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     try {
+      await ev.action.setTitle("...");
       const agent = stateAggregator.getActiveAgent();
       if (!agent) {
         await ev.action.showAlert();
@@ -19,6 +20,8 @@ export class SlashReviewAction extends SingletonAction {
     } catch (error) {
       streamDeck.logger.error("Failed to send /review:", error);
       await ev.action.showAlert();
+    } finally {
+      await ev.action.setTitle("");
     }
   }
 }
