@@ -1,5 +1,11 @@
-import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { claudeAgent } from "../agents/index.js";
+import {
+  SingletonAction,
+  type KeyDownEvent,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+} from "@elgato/streamdeck";
+import { stateAggregator } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Mistake Log Action - Quick-log mistakes to context-layer brain
@@ -30,25 +36,40 @@ export class MistakeLogAction extends SingletonAction {
     try {
       await ev.action.setTitle("!");
 
-      // Send mistake log command to Claude
-      await claudeAgent.sendText("Log this as a mistake: Something went wrong - please describe what happened and log it to my brain using mistake_log");
+      // Send mistake log command to the active agent
+      const ok =
+        (await stateAggregator
+          .getActiveAgent()
+          ?.sendText(
+            "Log this as a mistake: Something went wrong - please describe what happened and log it to my brain using mistake_log",
+          )) ?? false;
 
-      this.mistakeCount++;
-      await this.updateAll();
-      await ev.action.showOk();
+      if (ok) {
+        this.mistakeCount++;
+        await this.updateAll();
+        await ev.action.showOk();
+      } else {
+        await ev.action.showAlert();
+      }
     } catch (error) {
       console.error("Mistake log failed:", error);
       await ev.action.showAlert();
     }
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
     const svg = this.createMistakeSvg();
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private async updateAll(): Promise<void> {
-    await Promise.allSettled([...this.activeActions.values()].map((action) => this.updateDisplay(action)));
+    await Promise.allSettled(
+      [...this.activeActions.values()].map((action) =>
+        this.updateDisplay(action),
+      ),
+    );
   }
 
   private createMistakeSvg(): string {

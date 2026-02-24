@@ -12,7 +12,7 @@ import { mkdir, readdir, readFile, writeFile, unlink } from "node:fs/promises";
 import type { JsonObject, JsonValue } from "@elgato/utils";
 import { stateAggregator } from "../agents/state-aggregator.js";
 import type { AgentState, SpawnOptions } from "../agents/base-agent.js";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Structure for a saved session profile
@@ -424,7 +424,7 @@ export class SessionManagerAction extends SingletonAction {
       </svg>
     `;
 
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   // ============================================

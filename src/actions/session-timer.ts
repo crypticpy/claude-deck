@@ -8,6 +8,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Session Timer Action - Shows how long the current session has been running
@@ -80,7 +81,7 @@ export class SessionTimerAction extends SingletonAction {
   ): Promise<void> {
     const state = this.getActiveAgentState();
     const svg = this.createTimerSvg(state);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private formatDuration(ms: number): {

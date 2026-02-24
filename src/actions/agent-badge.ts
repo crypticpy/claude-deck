@@ -21,6 +21,7 @@ import {
   AGENT_COLORS,
   STATUS_COLORS,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Settings for the agent badge
@@ -415,8 +416,7 @@ export class AgentBadgeAction extends SingletonAction {
       </svg>
     `;
 
-    const base64 = Buffer.from(svg).toString("base64");
-    await ev.action.setImage(`data:image/svg+xml;base64,${base64}`);
+    await ev.action.setImage(svgToDataUri(svg));
   }
 
   private getAgentInitials(agentId: string): string {

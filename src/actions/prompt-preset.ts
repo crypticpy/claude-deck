@@ -5,8 +5,8 @@ import {
   type WillDisappearEvent,
   type DidReceiveSettingsEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent } from "../agents/index.js";
-import { escapeXml } from "../utils/svg-utils.js";
+import { stateAggregator } from "../agents/index.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 interface PromptPresetSettings {
   prompt?: string;
@@ -49,8 +49,13 @@ export class PromptPresetAction extends SingletonAction {
       const settings = this.getSettings(ev.action.id);
       const prompt = settings.prompt || "Hello!";
       await ev.action.setTitle("...");
-      await claudeAgent.sendText(prompt);
-      await ev.action.showOk();
+      const ok =
+        (await stateAggregator.getActiveAgent()?.sendText(prompt)) ?? false;
+      if (ok) {
+        await ev.action.showOk();
+      } else {
+        await ev.action.showAlert();
+      }
     } catch (error) {
       console.error("Prompt preset failed:", error);
       await ev.action.showAlert();
@@ -64,7 +69,7 @@ export class PromptPresetAction extends SingletonAction {
   ): Promise<void> {
     const settings = this.getSettings(action.id);
     const svg = this.createPresetSvg(settings);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private getSettings(actionId: string): PromptPresetSettings {

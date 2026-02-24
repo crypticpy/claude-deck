@@ -20,6 +20,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { stateAggregator, AGENT_COLORS } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 type SettingsPiMessage = JsonValue & {
   type: string;
@@ -179,9 +180,7 @@ export class SettingsAction extends SingletonAction {
       <text x="72" y="120" font-family="system-ui" font-size="10" fill="#64748b" text-anchor="middle">${enabledCount} agents</text>
     </svg>`;
 
-    await action.setImage(
-      `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
-    );
+    await action.setImage(svgToDataUri(svg));
     await action.setTitle("");
   }
 }

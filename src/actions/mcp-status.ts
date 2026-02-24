@@ -13,9 +13,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { claudeAgent } from "../agents/index.js";
+import { stateAggregator } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -106,7 +106,8 @@ export class McpStatusAction extends SingletonAction {
 
     try {
       if (command) {
-        const ok = await claudeAgent.sendText(command);
+        const agent = stateAggregator.getActiveAgent();
+        const ok = agent ? await agent.sendText(command) : false;
         if (ok) await ev.action.showOk();
         else await ev.action.showAlert();
       } else {
@@ -199,7 +200,7 @@ export class McpStatusAction extends SingletonAction {
       </svg>
     `;
 
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private truncate(str: string, max: number): string {

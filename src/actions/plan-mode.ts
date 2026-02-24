@@ -9,6 +9,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Plan Mode Action - Toggle read-only planning mode
@@ -91,7 +92,7 @@ export class PlanModeAction extends SingletonAction {
     const mode = state?.mode || "default";
     const isPlanOn = mode === "plan";
     const svg = this.createPlanSvg(isPlanOn, mode);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private getModeLabel(mode: string): string {

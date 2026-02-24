@@ -12,7 +12,7 @@ import {
   type AggregatedState,
 } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 type CostBudgetSettings = JsonObject & {
   budgetUsd?: number;
@@ -167,7 +167,7 @@ export class CostDisplayAction extends SingletonAction {
   ): Promise<void> {
     const settings = this.getSettings(action.id);
     const svg = this.createCostSvg(state, settings);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private getCost(state: AgentState | undefined): number {

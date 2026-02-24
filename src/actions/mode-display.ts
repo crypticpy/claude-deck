@@ -9,6 +9,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Mode Display Action - Shows current permission mode with visual indicator
@@ -81,7 +82,7 @@ export class ModeDisplayAction extends SingletonAction {
   ): Promise<void> {
     const mode = state?.mode || "default";
     const svg = this.createModeSvg(mode);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private async updateAllDisplays(): Promise<void> {

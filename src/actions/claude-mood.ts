@@ -3,7 +3,12 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Claude Mood Action - Animated face showing current activity state
@@ -12,7 +17,7 @@ export class ClaudeMoodAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.claude-mood";
 
   private activeActions = new Map<string, WillAppearEvent["action"]>();
-  private updateHandler?: (state: AgentState) => void;
+  private updateHandler?: (state: AggregatedState) => void;
   private refreshInterval?: ReturnType<typeof setInterval>;
   private frame = 0;
 
@@ -26,7 +31,7 @@ export class ClaudeMoodAction extends SingletonAction {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.updateHandler);
     }
 
     // Animate at 500ms for smooth transitions
@@ -44,7 +49,7 @@ export class ClaudeMoodAction extends SingletonAction {
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
     if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
+      stateAggregator.removeListener("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
     if (this.activeActions.size === 0 && this.refreshInterval) {
@@ -62,17 +67,22 @@ export class ClaudeMoodAction extends SingletonAction {
     );
   }
 
+  private getActiveAgentState(): AgentState | undefined {
+    const id = stateAggregator.getActiveAgentId();
+    return id ? stateAggregator.getAgentState(id) : undefined;
+  }
+
   private async updateDisplay(
     action: WillAppearEvent["action"],
   ): Promise<void> {
-    const state = claudeAgent.getState();
+    const state = this.getActiveAgentState();
     const svg = this.createMoodSvg(state);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
-  private createMoodSvg(state: AgentState): string {
-    const status = state.status || "idle";
-    const isActive = state.status !== "disconnected";
+  private createMoodSvg(state: AgentState | undefined): string {
+    const status = state?.status || "idle";
+    const isActive = state?.status !== "disconnected";
 
     let faceColor = "#d97706"; // Orange Claude color
     let expression = "happy";

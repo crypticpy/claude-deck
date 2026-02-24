@@ -3,8 +3,12 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
-import { escapeXml } from "../utils/svg-utils.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Activity Display Action - Shows current Claude activity and recent tool calls
@@ -17,7 +21,7 @@ import { escapeXml } from "../utils/svg-utils.js";
 export class ActivityDisplayAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.activity-display";
 
-  private updateHandler?: (state: AgentState) => void;
+  private updateHandler?: (state: AggregatedState) => void;
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   constructor() {
     super();
@@ -26,16 +30,17 @@ export class ActivityDisplayAction extends SingletonAction {
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
 
-    const state = claudeAgent.getState();
+    const state = this.getActiveAgentState();
     await this.updateDisplay(ev.action, state);
 
     if (!this.updateHandler) {
-      this.updateHandler = (newState: AgentState) => {
-        void this.updateAllWithState(newState).catch(() => {
+      this.updateHandler = () => {
+        const agentState = this.getActiveAgentState();
+        void this.updateAllWithState(agentState).catch(() => {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.updateHandler);
     }
   }
 
@@ -43,12 +48,19 @@ export class ActivityDisplayAction extends SingletonAction {
     this.activeActions.delete(ev.action.id);
 
     if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
+      stateAggregator.removeListener("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
   }
 
-  private async updateAllWithState(state: AgentState): Promise<void> {
+  private getActiveAgentState(): AgentState | undefined {
+    const id = stateAggregator.getActiveAgentId();
+    return id ? stateAggregator.getAgentState(id) : undefined;
+  }
+
+  private async updateAllWithState(
+    state: AgentState | undefined,
+  ): Promise<void> {
     if (this.activeActions.size === 0) return;
     await Promise.allSettled(
       [...this.activeActions.values()].map((action) =>
@@ -59,13 +71,13 @@ export class ActivityDisplayAction extends SingletonAction {
 
   private async updateDisplay(
     action: WillAppearEvent["action"],
-    state: AgentState,
+    state: AgentState | undefined,
   ): Promise<void> {
     const svg = this.createActivitySvg(state);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
-  private createActivitySvg(state: AgentState): string {
+  private createActivitySvg(state: AgentState | undefined): string {
     const statusConfigs: Record<
       string,
       { color: string; icon: string; pulse: boolean }
@@ -76,13 +88,13 @@ export class ActivityDisplayAction extends SingletonAction {
       error: { color: "#ef4444", icon: "✕", pulse: false },
     };
 
-    const config = statusConfigs[state.status] || statusConfigs.idle;
-    const toolEntries = state.toolUsage ? Object.entries(state.toolUsage) : [];
+    const config = statusConfigs[state?.status ?? "idle"] || statusConfigs.idle;
+    const toolEntries = state?.toolUsage ? Object.entries(state.toolUsage) : [];
     const lastTool =
       toolEntries.length > 0 ? toolEntries[toolEntries.length - 1][0] : "—";
     const toolCount = toolEntries.reduce((sum, [, count]) => sum + count, 0);
-    const statusText =
-      state.status.charAt(0).toUpperCase() + state.status.slice(1);
+    const status = state?.status ?? "idle";
+    const statusText = status.charAt(0).toUpperCase() + status.slice(1);
 
     // Animated pulse for active states
     const pulseAnimation = config.pulse

@@ -8,6 +8,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Context Bar Action - Shows context window usage as a visual progress bar
@@ -65,7 +66,7 @@ export class ContextBarAction extends SingletonAction {
   ): Promise<void> {
     const state = this.getActiveAgentState();
     const svg = this.createBarSvg(state);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private getBarColor(percent: number): string {

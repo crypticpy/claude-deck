@@ -10,6 +10,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Settings for the Interrupt action
@@ -126,9 +127,7 @@ export class InterruptAction extends SingletonAction {
       svg = this.generateIdleSvg();
     }
 
-    await action.setImage(
-      `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
-    );
+    await action.setImage(svgToDataUri(svg));
 
     // Clear title so SVG is the sole visual
     await action.setTitle("");

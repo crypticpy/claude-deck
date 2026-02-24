@@ -8,10 +8,13 @@ import streamDeck, {
 } from "@elgato/streamdeck";
 import {
   claudeAgent,
+  stateAggregator,
   terminalDetector,
+  type AgentState,
   type TerminalType,
 } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 type TerminalTargetSettings = JsonObject & {
   terminalType?: TerminalType;
@@ -32,6 +35,7 @@ export class TerminalTargetAction extends SingletonAction {
     this.activeActions.set(ev.action.id, ev.action);
 
     const settings = (ev.payload.settings as TerminalTargetSettings) ?? {};
+    // TODO: terminal type management needs to be generalized for multi-agent
     if (settings.terminalType) {
       claudeAgent.setTerminalType(settings.terminalType);
     }
@@ -59,6 +63,7 @@ export class TerminalTargetAction extends SingletonAction {
     ev: DidReceiveSettingsEvent,
   ): Promise<void> {
     const settings = (ev.payload.settings as TerminalTargetSettings) ?? {};
+    // TODO: terminal type management needs to be generalized for multi-agent
     if (settings.terminalType) {
       claudeAgent.setTerminalType(settings.terminalType);
     }
@@ -75,10 +80,11 @@ export class TerminalTargetAction extends SingletonAction {
     const payload = ev.payload as TerminalTargetPiMessage;
     try {
       if (payload?.type === "setTerminalType") {
+        // TODO: terminal type management needs to be generalized for multi-agent
         claudeAgent.setTerminalType(payload.terminalType);
         await ev.action.setSettings({ terminalType: payload.terminalType });
       } else if (payload?.type === "focus") {
-        await claudeAgent.focusTerminal();
+        await stateAggregator.getActiveAgent()?.focusTerminal();
       }
 
       if (
@@ -96,7 +102,7 @@ export class TerminalTargetAction extends SingletonAction {
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     try {
-      await claudeAgent.focusTerminal();
+      await stateAggregator.getActiveAgent()?.focusTerminal();
       await ev.action.showOk();
       await this.updateDisplay(ev.action);
     } catch (error) {
@@ -113,13 +119,20 @@ export class TerminalTargetAction extends SingletonAction {
     );
   }
 
+  private getActiveAgentState(): AgentState | undefined {
+    const id = stateAggregator.getActiveAgentId();
+    return id ? stateAggregator.getAgentState(id) : undefined;
+  }
+
   private async sendPiState(): Promise<void> {
+    // TODO: terminal type management needs to be generalized for multi-agent
     const terminalType = claudeAgent.getTerminalType();
-    const state = claudeAgent.getState();
+    const state = this.getActiveAgentState();
+    const agent = stateAggregator.getActiveAgent();
     const [frontmostApp, isFocused, isRunning] = await Promise.all([
       terminalDetector.getFrontmostAppName(),
-      claudeAgent.isTerminalFocused(),
-      claudeAgent.isRunning(),
+      agent?.isTerminalFocused() ?? Promise.resolve(false),
+      agent?.isRunning() ?? Promise.resolve(false),
     ]);
 
     const payload = {
@@ -128,8 +141,8 @@ export class TerminalTargetAction extends SingletonAction {
       isFocused,
       isRunning,
       claude: {
-        sessionActive: state.status !== "disconnected",
-        status: state.status,
+        sessionActive: state?.status !== "disconnected",
+        status: state?.status ?? "disconnected",
       },
       supportedTerminals: [
         "kitty",
@@ -148,14 +161,16 @@ export class TerminalTargetAction extends SingletonAction {
   private async updateDisplay(
     action: WillAppearEvent["action"],
   ): Promise<void> {
+    // TODO: terminal type management needs to be generalized for multi-agent
     const terminalType = claudeAgent.getTerminalType();
+    const agent = stateAggregator.getActiveAgent();
     const [isFocused, isRunning] = await Promise.all([
-      claudeAgent.isTerminalFocused(),
-      claudeAgent.isRunning(),
+      agent?.isTerminalFocused() ?? Promise.resolve(false),
+      agent?.isRunning() ?? Promise.resolve(false),
     ]);
 
     const svg = this.createSvg({ terminalType, isFocused, isRunning });
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private createSvg(input: {

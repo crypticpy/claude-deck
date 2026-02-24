@@ -9,7 +9,7 @@ import {
   type AggregatedState,
   type PermissionMode,
 } from "../agents/index.js";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Mode Cycle Action - Cycles through permission modes for the active agent
@@ -113,8 +113,7 @@ export class ModeCycleAction extends SingletonAction {
     const label = this.modeLabels[mode] || mode.toUpperCase();
 
     const svg = this.generateModeSvg(label, color);
-    const base64 = Buffer.from(svg).toString("base64");
-    await action.setImage(`data:image/svg+xml;base64,${base64}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private generateModeSvg(label: string, color: string): string {

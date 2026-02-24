@@ -6,7 +6,7 @@ import {
 } from "@elgato/streamdeck";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -116,7 +116,7 @@ export class GitStatusAction extends SingletonAction {
     action: WillAppearEvent["action"],
   ): Promise<void> {
     const svg = this.createGitSvg();
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private createGitSvg(): string {

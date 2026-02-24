@@ -8,13 +8,12 @@ import streamDeck, {
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
 import {
-  claudeAgent,
   stateAggregator,
   AGENT_REGISTRY,
   type BaseAgentAdapter,
 } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Condition types for conditional execution
@@ -325,8 +324,8 @@ export class MacroAction extends SingletonAction {
     const targetAgentId = (step as MultiAgentMacroStep).targetAgent;
 
     try {
-      // Get the agent adapter to use (always returns a valid agent)
       const agent = this.getAgentForStep(targetAgentId);
+      if (!agent) return { success: false, error: "No active agent" };
 
       switch (step.type) {
         case "focusTerminal":
@@ -370,16 +369,16 @@ export class MacroAction extends SingletonAction {
   }
 
   /**
-   * Get the agent adapter for a step, falling back to claudeAgent
+   * Get the agent adapter for a step, using the active agent by default
    */
-  private getAgentForStep(targetAgentId: string | undefined): BaseAgentAdapter {
+  private getAgentForStep(
+    targetAgentId: string | undefined,
+  ): BaseAgentAdapter | undefined {
     if (targetAgentId) {
       const agent = AGENT_REGISTRY[targetAgentId];
       if (agent) return agent;
     }
-
-    // Use active agent if available, otherwise fall back to Claude
-    return stateAggregator.getActiveAgent() ?? claudeAgent;
+    return stateAggregator.getActiveAgent() ?? undefined;
   }
 
   private async updateDisplay(
@@ -411,7 +410,7 @@ export class MacroAction extends SingletonAction {
       </svg>
     `;
 
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private truncate(str: string, max: number): string {

@@ -8,6 +8,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Context Percent Action - Shows context window usage as a large percentage
@@ -79,7 +80,7 @@ export class ContextPercentAction extends SingletonAction {
   ): Promise<void> {
     const state = this.getActiveAgentState();
     const svg = this.createPercentSvg(state);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private getColor(percent: number): string {

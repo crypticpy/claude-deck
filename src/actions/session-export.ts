@@ -1,4 +1,8 @@
-import { SingletonAction, type KeyDownEvent, type WillAppearEvent } from "@elgato/streamdeck";
+import {
+  SingletonAction,
+  type KeyDownEvent,
+  type WillAppearEvent,
+} from "@elgato/streamdeck";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { copyFile, mkdir, stat, writeFile } from "node:fs/promises";
@@ -6,6 +10,7 @@ import { createReadStream } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -25,7 +30,14 @@ export class SessionExportAction extends SingletonAction {
 
       // Find most recent transcript
       const projectsDir = join(homedir(), ".claude", "projects");
-      const { stdout } = await execFileAsync("find", [projectsDir, "-name", "*.jsonl", "-mmin", "-60", "-print"]);
+      const { stdout } = await execFileAsync("find", [
+        projectsDir,
+        "-name",
+        "*.jsonl",
+        "-mmin",
+        "-60",
+        "-print",
+      ]);
       const candidates = stdout.split("\n").filter(Boolean);
 
       let transcriptPath = "";
@@ -53,7 +65,10 @@ export class SessionExportAction extends SingletonAction {
 
         // Also create a readable version
         const readablePath = exportPath.replace(".jsonl", ".txt");
-        const rl = createInterface({ input: createReadStream(transcriptPath), crlfDelay: Infinity });
+        const rl = createInterface({
+          input: createReadStream(transcriptPath),
+          crlfDelay: Infinity,
+        });
         const lines: string[] = [];
         for await (const line of rl) {
           try {
@@ -79,7 +94,9 @@ export class SessionExportAction extends SingletonAction {
     }
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
         <rect width="144" height="144" fill="#0f172a" rx="12"/>
@@ -93,6 +110,6 @@ export class SessionExportAction extends SingletonAction {
         <text x="72" y="130" font-family="system-ui" font-size="9" fill="#64748b" text-anchor="middle">Session</text>
       </svg>
     `;
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 }

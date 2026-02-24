@@ -107,6 +107,8 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
   private lastEmittedUpdatedAt = 0;
   private transcriptEnrichAt = 0;
   private transcriptEnrichInFlight?: Promise<void>;
+  private cachedTranscriptPath?: string;
+  private cachedTranscriptPathAt = 0;
   private cleanupTick = 0;
 
   constructor() {
@@ -629,32 +631,54 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
 
     this.transcriptEnrichInFlight = (async () => {
       try {
-        const projectsDir = join(homedir(), ".claude", "projects");
-        const { stdout } = await execFileAsync("find", [
-          projectsDir,
-          "-name",
-          "*.jsonl",
-          "-mmin",
-          "-60",
-          "-print",
-        ]);
-        const candidates = stdout.split("\n").filter(Boolean);
-        if (candidates.length === 0) return;
-
         let newestPath = "";
-        let newestMtime = 0;
-        for (const p of candidates) {
+
+        // Check if cached transcript is still valid (re-scan at most every 30s)
+        if (
+          this.cachedTranscriptPath &&
+          Date.now() - this.cachedTranscriptPathAt < 30_000
+        ) {
           try {
-            const s = await stat(p);
-            if (s.mtimeMs > newestMtime) {
-              newestMtime = s.mtimeMs;
-              newestPath = p;
+            const s = await stat(this.cachedTranscriptPath);
+            if (s.mtimeMs > Date.now() - 60_000) {
+              // Use cached path
+              newestPath = this.cachedTranscriptPath;
             }
           } catch {
-            // ignore
+            this.cachedTranscriptPath = undefined; // file gone, re-scan
           }
         }
-        if (!newestPath) return;
+
+        if (!newestPath) {
+          const projectsDir = join(homedir(), ".claude", "projects");
+          const { stdout } = await execFileAsync("find", [
+            projectsDir,
+            "-name",
+            "*.jsonl",
+            "-mmin",
+            "-60",
+            "-print",
+          ]);
+          const candidates = stdout.split("\n").filter(Boolean);
+          if (candidates.length === 0) return;
+
+          let newestMtime = 0;
+          for (const p of candidates) {
+            try {
+              const s = await stat(p);
+              if (s.mtimeMs > newestMtime) {
+                newestMtime = s.mtimeMs;
+                newestPath = p;
+              }
+            } catch {
+              // ignore
+            }
+          }
+          if (!newestPath) return;
+
+          this.cachedTranscriptPath = newestPath;
+          this.cachedTranscriptPathAt = Date.now();
+        }
 
         const toolUsage: Record<string, number> = {
           ...(this.currentState.toolUsage ?? {}),

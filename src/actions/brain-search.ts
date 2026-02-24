@@ -4,7 +4,8 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent } from "../agents/index.js";
+import { stateAggregator } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Brain Search Action - Searches context-layer brain for lessons and insights
@@ -34,12 +35,18 @@ export class BrainSearchAction extends SingletonAction {
     try {
       await ev.action.setTitle("...");
 
-      // Send brain search command to Claude
-      await claudeAgent.sendText(
-        "Search my brain for recent lessons and hot files",
-      );
+      // Send brain search command to the active agent
+      const ok =
+        (await stateAggregator
+          .getActiveAgent()
+          ?.sendText("Search my brain for recent lessons and hot files")) ??
+        false;
 
-      await ev.action.showOk();
+      if (ok) {
+        await ev.action.showOk();
+      } else {
+        await ev.action.showAlert();
+      }
     } catch (error) {
       console.error("Brain search failed:", error);
       await ev.action.showAlert();
@@ -50,7 +57,7 @@ export class BrainSearchAction extends SingletonAction {
     action: WillAppearEvent["action"],
   ): Promise<void> {
     const svg = this.createBrainSvg();
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private createBrainSvg(): string {

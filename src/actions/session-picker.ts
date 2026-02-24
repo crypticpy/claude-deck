@@ -13,7 +13,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { stateAggregator } from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -128,7 +128,7 @@ export class SessionPickerAction extends SingletonAction {
       </svg>
     `;
 
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private truncate(str: string, max: number): string {

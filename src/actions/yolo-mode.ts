@@ -9,6 +9,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * YOLO Mode Action - Toggle auto-approve mode (bypass all permissions)
@@ -92,7 +93,7 @@ export class YoloModeAction extends SingletonAction {
     const isYoloOn =
       mode === "bypassPermissions" || mode === "yolo" || mode === "dontAsk";
     const svg = this.createYoloSvg(isYoloOn, mode);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private getModeLabel(mode: string): string {

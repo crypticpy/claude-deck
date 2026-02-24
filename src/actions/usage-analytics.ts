@@ -9,7 +9,7 @@ import {
   type AggregatedState,
 } from "../agents/state-aggregator.js";
 import type { AgentState } from "../agents/base-agent.js";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Stats view modes for cycling through different analytics displays
@@ -125,7 +125,7 @@ export class UsageAnalyticsAction extends SingletonAction {
     const currentView = view ?? this.viewByAction.get(action.id) ?? "summary";
     const analytics = this.aggregateAnalytics(state);
     const svg = this.createSvg(analytics, currentView);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private aggregateAnalytics(state: AggregatedState): AnalyticsData {

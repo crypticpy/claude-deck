@@ -3,38 +3,50 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
-import { escapeXml } from "../utils/svg-utils.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 export class PermissionDetailsAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.permission-details";
 
   private activeActions = new Map<string, WillAppearEvent["action"]>();
-  private updateHandler?: (state: AgentState) => void;
+  private updateHandler?: (state: AggregatedState) => void;
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
-    await this.updateDisplay(ev.action, claudeAgent.getState());
+    await this.updateDisplay(ev.action, this.getActiveAgentState());
 
     if (!this.updateHandler) {
-      this.updateHandler = (state: AgentState) => {
-        void this.updateAllWithState(state).catch(() => {
+      this.updateHandler = () => {
+        const agentState = this.getActiveAgentState();
+        void this.updateAllWithState(agentState).catch(() => {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.updateHandler);
     }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
     if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
+      stateAggregator.removeListener("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
   }
 
-  private async updateAllWithState(state: AgentState): Promise<void> {
+  private getActiveAgentState(): AgentState | undefined {
+    const id = stateAggregator.getActiveAgentId();
+    return id ? stateAggregator.getAgentState(id) : undefined;
+  }
+
+  private async updateAllWithState(
+    state: AgentState | undefined,
+  ): Promise<void> {
     await Promise.allSettled(
       [...this.activeActions.values()].map((action) =>
         this.updateDisplay(action, state),
@@ -44,9 +56,9 @@ export class PermissionDetailsAction extends SingletonAction {
 
   private async updateDisplay(
     action: WillAppearEvent["action"],
-    state: AgentState,
+    state: AgentState | undefined,
   ): Promise<void> {
-    const pending = state.pendingPermission;
+    const pending = state?.pendingPermission;
     const hasPending = !!pending;
     const color = hasPending ? "#eab308" : "#64748b";
     const title = hasPending ? (pending?.tool ?? "Permission") : "None";
@@ -77,7 +89,7 @@ export class PermissionDetailsAction extends SingletonAction {
       </svg>
     `;
 
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private truncate(str: string, max: number): string {

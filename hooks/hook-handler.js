@@ -35,7 +35,7 @@ const STATE_DIR = path.join(os.homedir(), ".claude-deck");
 const STATE_FILE = path.join(STATE_DIR, "state.json");
 const SESSIONS_DIR = path.join(STATE_DIR, "sessions");
 const STATE_PERMS = 0o600;
-const LOCK_TIMEOUT_MS = 2000;
+const LOCK_TIMEOUT_MS = 500;
 
 function isProcessAlive(pid) {
   try {
@@ -92,6 +92,10 @@ if (!fs.existsSync(SESSIONS_DIR)) {
 }
 
 // Default state shape
+// NOTE: sessionActive is set to true by SessionStart and UserPromptSubmit hooks.
+// It is intentionally NOT cleared by the Stop hook (Stop fires between turns,
+// not at session end). Session cleanup is handled by staleness detection in
+// the Stream Deck plugin (claude-agent.ts).
 const DEFAULT_STATE = {
   sessionActive: false,
   currentModel: "sonnet",
@@ -178,6 +182,11 @@ function writeSessionState(state) {
       mode: STATE_PERMS,
     });
     fs.renameSync(tmpFile, sessionFile);
+    try {
+      fs.chmodSync(sessionFile, STATE_PERMS);
+    } catch (_) {
+      /* best effort */
+    }
   } catch (e) {
     try {
       fs.unlinkSync(tmpFile);

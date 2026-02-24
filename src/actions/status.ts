@@ -8,6 +8,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Status Action - Displays current Claude Code session status
@@ -72,7 +73,7 @@ export class StatusAction extends SingletonAction {
 
     // Build a custom SVG with shape-based differentiation
     const svg = this.createStatusSvg(status, state);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
 
     // Update title based on status
     let title = "Idle";

@@ -3,7 +3,12 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Tool Breakdown Action - Pie chart showing tool usage distribution
@@ -12,7 +17,7 @@ export class ToolBreakdownAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.tool-breakdown";
 
   private activeActions = new Map<string, WillAppearEvent["action"]>();
-  private updateHandler?: (state: AgentState) => void;
+  private updateHandler?: (state: AggregatedState) => void;
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
@@ -23,14 +28,14 @@ export class ToolBreakdownAction extends SingletonAction {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.updateHandler);
     }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
     if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
+      stateAggregator.removeListener("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
   }
@@ -44,18 +49,23 @@ export class ToolBreakdownAction extends SingletonAction {
     );
   }
 
+  private getActiveAgentState(): AgentState | undefined {
+    const id = stateAggregator.getActiveAgentId();
+    return id ? stateAggregator.getAgentState(id) : undefined;
+  }
+
   private async updateDisplay(
     action: WillAppearEvent["action"],
   ): Promise<void> {
-    const state = claudeAgent.getState();
+    const state = this.getActiveAgentState();
     const svg = this.createPieChartSvg(state);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
-  private createPieChartSvg(state: AgentState): string {
+  private createPieChartSvg(state: AgentState | undefined): string {
     // Tool counts from state (populated by hooks if available)
     const tools: Record<string, number> =
-      state.toolUsage && Object.keys(state.toolUsage).length > 0
+      state?.toolUsage && Object.keys(state.toolUsage).length > 0
         ? state.toolUsage
         : {};
     const total = Object.values(tools).reduce((a, b) => a + b, 0) || 1;
@@ -93,7 +103,7 @@ export class ToolBreakdownAction extends SingletonAction {
       startAngle = endAngle;
     }
 
-    const toolCount = state.toolUsage
+    const toolCount = state?.toolUsage
       ? Object.values(state.toolUsage).reduce((sum, count) => sum + count, 0)
       : 0;
 

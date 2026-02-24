@@ -3,7 +3,8 @@ import {
   type KeyDownEvent,
   type WillAppearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent } from "../agents/index.js";
+import { stateAggregator } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -33,8 +34,13 @@ export class ClipboardSendAction extends SingletonAction {
           clipboardText.length > 500
             ? clipboardText.slice(0, 500) + "..."
             : clipboardText;
-        await claudeAgent.sendText(text);
-        await ev.action.showOk();
+        const ok =
+          (await stateAggregator.getActiveAgent()?.sendText(text)) ?? false;
+        if (ok) {
+          await ev.action.showOk();
+        } else {
+          await ev.action.showAlert();
+        }
       } else {
         await ev.action.showAlert();
       }
@@ -62,6 +68,6 @@ export class ClipboardSendAction extends SingletonAction {
         <text x="72" y="130" font-family="system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Clipboard</text>
       </svg>
     `;
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 }

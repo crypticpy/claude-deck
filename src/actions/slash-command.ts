@@ -5,8 +5,8 @@ import {
   type WillDisappearEvent,
   type DidReceiveSettingsEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent } from "../agents/index.js";
-import { escapeXml } from "../utils/svg-utils.js";
+import { stateAggregator } from "../agents/index.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 interface SlashCommandSettings {
   command?: string;
@@ -57,8 +57,9 @@ export class SlashCommandAction extends SingletonAction {
       const command = settings.command || "/help";
       await ev.action.setTitle("...");
 
-      // Send the slash command to Claude
-      const success = await claudeAgent.sendText(command);
+      // Send the slash command to the active agent
+      const success =
+        (await stateAggregator.getActiveAgent()?.sendText(command)) ?? false;
 
       if (success) {
         await ev.action.showOk();
@@ -78,7 +79,7 @@ export class SlashCommandAction extends SingletonAction {
   ): Promise<void> {
     const settings = this.getSettings(action.id);
     const svg = this.createCommandSvg(settings);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private getSettings(actionId: string): SlashCommandSettings {

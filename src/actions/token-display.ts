@@ -8,6 +8,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Token Display Action - Shows current token usage on the button
@@ -88,7 +89,7 @@ export class TokenDisplayAction extends SingletonAction {
       formatTokens(total),
     );
 
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private createTokenSvg(input: string, output: string, total: string): string {

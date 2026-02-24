@@ -23,7 +23,7 @@ import {
   STATUS_COLORS,
   type AggregatedState,
 } from "../agents/index.js";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 export class ActiveAgentDisplayAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.active-agent-display";
@@ -127,9 +127,7 @@ export class ActiveAgentDisplayAction extends SingletonAction {
     );
 
     await action.setTitle("");
-    await action.setImage(
-      `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
-    );
+    await action.setImage(svgToDataUri(svg));
   }
 
   private generateAgentSvg(
@@ -168,16 +166,14 @@ export class ActiveAgentDisplayAction extends SingletonAction {
   }
 
   private generateNoAgentSvg(): string {
-    return `data:image/svg+xml;base64,${Buffer.from(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+    return svgToDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
   <rect width="144" height="144" fill="#0f172a" rx="12"/>
   <circle cx="72" cy="50" r="28" fill="#374151" opacity="0.3"/>
   <circle cx="72" cy="50" r="28" fill="none" stroke="#374151" stroke-width="2" stroke-dasharray="4 4"/>
   <text x="72" y="56" font-family="system-ui" font-size="20" fill="#6b7280" text-anchor="middle">?</text>
   <text x="72" y="100" font-family="system-ui" font-size="12" fill="#6b7280" text-anchor="middle">No Agent</text>
   <text x="72" y="118" font-family="system-ui" font-size="10" fill="#4b5563" text-anchor="middle">Press to select</text>
-</svg>`,
-    ).toString("base64")}`;
+</svg>`);
   }
 
   private formatModelName(model: string): string {

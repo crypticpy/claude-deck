@@ -8,6 +8,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
+import { svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Idle Detector Action - Shows when Claude is waiting for input
@@ -108,7 +109,7 @@ export class IdleDetectorAction extends SingletonAction {
   ): Promise<void> {
     const state = this.getActiveAgentState();
     const svg = this.createIdleSvg(state);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private createIdleSvg(state: AgentState | undefined): string {

@@ -9,7 +9,7 @@ import {
   type AgentState,
   type AggregatedState,
 } from "../agents/index.js";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 /**
  * Model Display Action - Shows current model with visual badge
@@ -79,7 +79,7 @@ export class ModelDisplayAction extends SingletonAction {
   ): Promise<void> {
     const model = state?.model || "sonnet";
     const svg = this.createModelSvg(model);
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 
   private async updateAllDisplays(): Promise<void> {

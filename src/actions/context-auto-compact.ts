@@ -7,9 +7,13 @@ import streamDeck, {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
 import type { JsonObject, JsonValue } from "@elgato/utils";
-import { escapeXml } from "../utils/svg-utils.js";
+import { escapeXml, svgToDataUri } from "../utils/svg-utils.js";
 
 type ContextAutoCompactSettings = JsonObject & {
   thresholdPercent?: number;
@@ -25,7 +29,7 @@ export class ContextAutoCompactAction extends SingletonAction {
 
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   private settingsById = new Map<string, ContextAutoCompactSettings>();
-  private updateHandler?: (state: AgentState) => void;
+  private updateHandler?: (state: AggregatedState) => void;
   private lastAutoSentSessionStart?: string;
   private autoSendInFlight = false;
 
@@ -35,18 +39,19 @@ export class ContextAutoCompactAction extends SingletonAction {
       ev.action.id,
       (ev.payload.settings as ContextAutoCompactSettings) ?? {},
     );
-    await this.updateDisplay(ev.action, claudeAgent.getState());
+    await this.updateDisplay(ev.action, this.getActiveAgentState());
 
     if (!this.updateHandler) {
-      this.updateHandler = (state: AgentState) => {
-        void this.maybeAutoSend(state).catch(() => {
+      this.updateHandler = () => {
+        const agentState = this.getActiveAgentState();
+        void this.maybeAutoSend(agentState).catch(() => {
           // ignore
         });
-        void this.updateAllWithState(state).catch(() => {
+        void this.updateAllWithState(agentState).catch(() => {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.updateHandler);
     }
   }
 
@@ -55,7 +60,7 @@ export class ContextAutoCompactAction extends SingletonAction {
     this.settingsById.delete(ev.action.id);
 
     if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
+      stateAggregator.removeListener("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
   }
@@ -67,7 +72,7 @@ export class ContextAutoCompactAction extends SingletonAction {
       ev.action.id,
       (ev.payload.settings as ContextAutoCompactSettings) ?? {},
     );
-    await this.updateDisplay(ev.action, claudeAgent.getState());
+    await this.updateDisplay(ev.action, this.getActiveAgentState());
   }
 
   override async onPropertyInspectorDidAppear(
@@ -96,14 +101,15 @@ export class ContextAutoCompactAction extends SingletonAction {
 
     try {
       await ev.action.setTitle("...");
-      const ok = await claudeAgent.sendText(command);
+      const ok =
+        (await stateAggregator.getActiveAgent()?.sendText(command)) ?? false;
       if (ok) await ev.action.showOk();
       else await ev.action.showAlert();
     } catch (error) {
       streamDeck.logger.error("ContextAutoCompactAction send failed:", error);
       await ev.action.showAlert();
     } finally {
-      await this.updateDisplay(ev.action, claudeAgent.getState());
+      await this.updateDisplay(ev.action, this.getActiveAgentState());
     }
   }
 
@@ -118,6 +124,11 @@ export class ContextAutoCompactAction extends SingletonAction {
     };
   }
 
+  private getActiveAgentState(): AgentState | undefined {
+    const id = stateAggregator.getActiveAgentId();
+    return id ? stateAggregator.getAgentState(id) : undefined;
+  }
+
   private getPiState(actionId: string): JsonValue {
     const settings = this.getSettings(actionId);
     return {
@@ -126,8 +137,9 @@ export class ContextAutoCompactAction extends SingletonAction {
     } as unknown as JsonValue;
   }
 
-  private async maybeAutoSend(state: AgentState): Promise<void> {
+  private async maybeAutoSend(state: AgentState | undefined): Promise<void> {
     if (this.activeActions.size === 0) return;
+    if (!state) return;
 
     const anySettings = [...this.settingsById.values()];
     const threshold = Math.max(
@@ -147,19 +159,22 @@ export class ContextAutoCompactAction extends SingletonAction {
     if (sessionKey && this.lastAutoSentSessionStart === sessionKey) return;
     if (this.autoSendInFlight) return;
 
-    const focused = await claudeAgent.isTerminalFocused();
+    const agent = stateAggregator.getActiveAgent();
+    const focused = (await agent?.isTerminalFocused()) ?? false;
     if (!focused) return;
 
     this.autoSendInFlight = true;
     try {
-      const ok = await claudeAgent.sendText(command);
+      const ok = (await agent?.sendText(command)) ?? false;
       if (ok) this.lastAutoSentSessionStart = sessionKey;
     } finally {
       this.autoSendInFlight = false;
     }
   }
 
-  private async updateAllWithState(state: AgentState): Promise<void> {
+  private async updateAllWithState(
+    state: AgentState | undefined,
+  ): Promise<void> {
     await Promise.allSettled(
       [...this.activeActions.values()].map((action) =>
         this.updateDisplay(action, state),
@@ -169,10 +184,10 @@ export class ContextAutoCompactAction extends SingletonAction {
 
   private async updateDisplay(
     action: WillAppearEvent["action"],
-    state: AgentState,
+    state: AgentState | undefined,
   ): Promise<void> {
     const settings = this.getSettings(action.id);
-    const percent = Math.round(state.contextPercent ?? 0);
+    const percent = Math.round(state?.contextPercent ?? 0);
     const threshold = settings.thresholdPercent ?? 77;
 
     const over = percent >= threshold;
@@ -197,6 +212,6 @@ export class ContextAutoCompactAction extends SingletonAction {
       </svg>
     `;
 
-    await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+    await action.setImage(svgToDataUri(svg));
   }
 }
