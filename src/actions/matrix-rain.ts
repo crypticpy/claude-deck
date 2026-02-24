@@ -1,5 +1,5 @@
 import { SingletonAction, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { claudeController, type ClaudeState } from "../utils/claude-controller.js";
+import { claudeAgent, type AgentState } from "../agents/index.js";
 
 /**
  * Matrix Rain Action - Animated matrix effect when Claude is working
@@ -7,7 +7,8 @@ import { claudeController, type ClaudeState } from "../utils/claude-controller.j
 export class MatrixRainAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.matrix-rain";
 
-  private currentAction?: WillAppearEvent["action"];
+  private activeActions = new Map<string, WillAppearEvent["action"]>();
+  private updateHandler?: (state: AgentState) => void;
   private refreshInterval?: ReturnType<typeof setInterval>;
   private drops: number[] = [];
   private frame = 0;
@@ -21,39 +22,58 @@ export class MatrixRainAction extends SingletonAction {
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.currentAction = ev.action;
+    this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
 
-    claudeController.on("stateChange", async () => {
-      if (this.currentAction) await this.updateDisplay(this.currentAction);
-    });
+    if (!this.updateHandler) {
+      this.updateHandler = () => {
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      };
+      claudeAgent.on("stateChange", this.updateHandler);
+    }
 
     // Fast animation for matrix effect
-    this.refreshInterval = setInterval(() => {
-      if (this.currentAction) {
+    if (!this.refreshInterval) {
+      this.refreshInterval = setInterval(() => {
+        if (this.activeActions.size === 0) return;
         this.frame++;
-        // Update drop positions
         for (let i = 0; i < this.drops.length; i++) {
           this.drops[i] += 8 + Math.random() * 4;
           if (this.drops[i] > 144) this.drops[i] = -20;
         }
-        this.updateDisplay(this.currentAction);
-      }
-    }, 100);
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      }, 100);
+    }
   }
 
-  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
-    this.currentAction = undefined;
-    if (this.refreshInterval) clearInterval(this.refreshInterval);
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.activeActions.delete(ev.action.id);
+    if (this.activeActions.size === 0 && this.updateHandler) {
+      claudeAgent.off("stateChange", this.updateHandler);
+      this.updateHandler = undefined;
+    }
+    if (this.activeActions.size === 0 && this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = undefined;
+    }
+  }
+
+  private async updateAll(): Promise<void> {
+    if (this.activeActions.size === 0) return;
+    await Promise.allSettled([...this.activeActions.values()].map((action) => this.updateDisplay(action)));
   }
 
   private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
-    const state = claudeController.getState();
+    const state = claudeAgent.getState();
     const svg = this.createMatrixSvg(state);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
 
-  private createMatrixSvg(state: ClaudeState): string {
+  private createMatrixSvg(state: AgentState): string {
     const isWorking = state.status === "working";
     const chars = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン01";
 

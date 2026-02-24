@@ -1,5 +1,9 @@
-import { SingletonAction, type KeyDownEvent, type WillAppearEvent } from "@elgato/streamdeck";
-import { claudeController } from "../utils/claude-controller.js";
+import {
+  SingletonAction,
+  type KeyDownEvent,
+  type WillAppearEvent,
+} from "@elgato/streamdeck";
+import { stateAggregator } from "../agents/index.js";
 
 /**
  * Toggle Thinking Action - Enable/disable extended thinking mode
@@ -21,7 +25,8 @@ export class ToggleThinkingAction extends SingletonAction {
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     try {
-      const success = await claudeController.toggleThinking();
+      const agent = stateAggregator.getActiveAgent();
+      const success = agent ? await agent.toggleThinking() : false;
 
       if (success) {
         this.isThinkingOn = !this.isThinkingOn;

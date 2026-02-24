@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Session Picker</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; background: #2d2d2d; color: #d4d4d4; padding: 12px; margin: 0; }
+    .item { margin-bottom: 12px; }
+    .label { font-weight: 500; margin-bottom: 4px; color: #999; }
+    input, select, button { background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; padding: 6px 8px; width: 100%; box-sizing: border-box; }
+    button { cursor: pointer; }
+    button:hover { background: #4c4c4c; }
+    .hint { color: #94a3b8; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="item">
+    <div class="label">Button Label</div>
+    <input id="label" placeholder="Session" />
+  </div>
+  <div class="item">
+    <div class="label">Claude Project</div>
+    <select id="project"></select>
+    <div class="hint">Tap button to run <code>claude -c</code> in selected project directory.</div>
+  </div>
+  <button id="refreshBtn">Refresh Projects</button>
+
+  <script>
+    let ws = null;
+    let pluginUUID = null;
+    let actionContext = null;
+    let settings = { label: "Session", projectPath: "" };
+
+    function sendToPlugin(payload) {
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "sendToPlugin", context: actionContext, payload }));
+    }
+
+    function setSettings(next) {
+      settings = { ...settings, ...next };
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "setSettings", context: actionContext, payload: settings }));
+    }
+
+    function updateUI(projects) {
+      document.getElementById("label").value = settings.label || "";
+      const select = document.getElementById("project");
+      select.innerHTML = "";
+
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "(none)";
+      select.appendChild(none);
+
+      (projects || []).forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.projectPath;
+        const when = p.lastTranscriptMtimeMs ? new Date(p.lastTranscriptMtimeMs).toLocaleString() : "";
+        opt.textContent = `${p.projectName}${when ? " — " + when : ""}`;
+        if (p.projectPath === settings.projectPath) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo, inActionInfo) {
+      pluginUUID = inPluginUUID;
+      const actionInfo = JSON.parse(inActionInfo);
+      actionContext = actionInfo.context;
+      settings = actionInfo.payload?.settings || settings;
+
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: pluginUUID }));
+        ws.send(JSON.stringify({ event: "getSettings", context: actionContext }));
+        sendToPlugin({ type: "refresh" });
+      };
+      ws.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        if (d.event === "didReceiveSettings") {
+          settings = d.payload.settings || settings;
+        }
+        if (d.event === "sendToPropertyInspector") {
+          updateUI(d.payload.projects);
+        }
+      };
+    }
+
+    document.getElementById("label").addEventListener("change", (e) => setSettings({ label: e.target.value }));
+    document.getElementById("project").addEventListener("change", (e) => setSettings({ projectPath: e.target.value }));
+    document.getElementById("refreshBtn").addEventListener("click", () => sendToPlugin({ type: "refresh" }));
+  </script>
+</body>
+</html>
+

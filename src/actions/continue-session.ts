@@ -1,5 +1,9 @@
-import { SingletonAction, type KeyDownEvent, type WillAppearEvent } from "@elgato/streamdeck";
-import { claudeController } from "../utils/claude-controller.js";
+import {
+  SingletonAction,
+  type KeyDownEvent,
+  type WillAppearEvent,
+} from "@elgato/streamdeck";
+import { stateAggregator } from "../agents/index.js";
 
 /**
  * Continue Session Action - Resume the most recent Claude Code session
@@ -18,7 +22,7 @@ export class ContinueSessionAction extends SingletonAction {
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     try {
       await ev.action.setTitle("...");
-      await claudeController.continueSession();
+      await stateAggregator.continueSession("claude");
       await ev.action.showOk();
     } catch (error) {
       console.error("Continue session failed:", error);

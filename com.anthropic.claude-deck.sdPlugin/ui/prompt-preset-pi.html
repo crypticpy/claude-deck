@@ -36,13 +36,14 @@
         </div>
     </div>
     <script>
-        let ws, uuid, settings = { prompt: "", label: "Preset", color: "#3b82f6" };
-        function connectElgatoStreamDeckSocket(port, pluginUUID, registerEvent, info, actionInfo) {
-            uuid = pluginUUID;
+        let ws, pluginUUID, actionContext, settings = { prompt: "", label: "Preset", color: "#3b82f6" };
+        function connectElgatoStreamDeckSocket(port, inPluginUUID, registerEvent, info, actionInfo) {
+            pluginUUID = inPluginUUID;
             const ai = JSON.parse(actionInfo);
+            actionContext = ai.context;
             settings = ai.payload?.settings || settings;
             ws = new WebSocket("ws://127.0.0.1:" + port);
-            ws.onopen = () => { ws.send(JSON.stringify({ event: registerEvent, uuid: pluginUUID })); updateUI(); };
+            ws.onopen = () => { ws.send(JSON.stringify({ event: registerEvent, uuid: pluginUUID })); updateUI(); ws.send(JSON.stringify({ event: "getSettings", context: actionContext })); };
             ws.onmessage = (e) => { const d = JSON.parse(e.data); if (d.event === "didReceiveSettings") { settings = d.payload.settings || settings; updateUI(); } };
         }
         function updateUI() {
@@ -53,7 +54,7 @@
         function save() {
             settings.label = document.getElementById("label").value;
             settings.prompt = document.getElementById("prompt").value;
-            ws?.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
+            ws?.send(JSON.stringify({ event: "setSettings", context: actionContext, payload: settings }));
         }
         document.getElementById("label").addEventListener("change", save);
         document.getElementById("prompt").addEventListener("change", save);

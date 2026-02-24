@@ -19,6 +19,7 @@ import { CostDisplayAction } from "./actions/cost-display.js";
 import { ContextBarAction } from "./actions/context-bar.js";
 import { ContextPercentAction } from "./actions/context-percent.js";
 import { SessionTimerAction } from "./actions/session-timer.js";
+import { ContextAutoCompactAction } from "./actions/context-auto-compact.js";
 import { BrainSearchAction } from "./actions/brain-search.js";
 import { MistakeLogAction } from "./actions/mistake-log.js";
 import { GitStatusAction } from "./actions/git-status.js";
@@ -33,13 +34,21 @@ import { ScreenshotClaudeAction } from "./actions/screenshot-claude.js";
 import { MatrixRainAction } from "./actions/matrix-rain.js";
 import { SessionExportAction } from "./actions/session-export.js";
 import { PromptPresetAction } from "./actions/prompt-preset.js";
-import { claudeController } from "./utils/claude-controller.js";
+import { TerminalTargetAction } from "./actions/terminal-target.js";
+import { SessionPickerAction } from "./actions/session-picker.js";
+import { PermissionDetailsAction } from "./actions/permission-details.js";
+import { MacroAction } from "./actions/macro.js";
+import { McpStatusAction } from "./actions/mcp-status.js";
+import { AgentBadgeAction } from "./actions/agent-badge.js";
+import { ActiveAgentDisplayAction } from "./actions/active-agent-display.js";
+import { SettingsAction } from "./actions/settings.js";
+import { SessionManagerAction } from "./actions/session-manager.js";
+import { UsageAnalyticsAction } from "./actions/usage-analytics.js";
+import { initializeDefaultAgents } from "./agents/index.js";
 
-// Configure logging (debug level enabled in manifest)
-
-// Initialize Claude controller
-claudeController.initialize().catch((err) => {
-  streamDeck.logger.error("Failed to initialize Claude controller:", err);
+// Initialize multi-agent system (registers all agents, starts state watching)
+initializeDefaultAgents().catch((err) => {
+  streamDeck.logger.error("Failed to initialize agents:", err);
 });
 
 // Register all actions with their UUIDs
@@ -65,6 +74,7 @@ streamDeck.actions.registerAction(new CostDisplayAction());
 streamDeck.actions.registerAction(new ContextBarAction());
 streamDeck.actions.registerAction(new ContextPercentAction());
 streamDeck.actions.registerAction(new SessionTimerAction());
+streamDeck.actions.registerAction(new ContextAutoCompactAction());
 streamDeck.actions.registerAction(new BrainSearchAction());
 streamDeck.actions.registerAction(new MistakeLogAction());
 streamDeck.actions.registerAction(new GitStatusAction());
@@ -79,6 +89,22 @@ streamDeck.actions.registerAction(new ScreenshotClaudeAction());
 streamDeck.actions.registerAction(new MatrixRainAction());
 streamDeck.actions.registerAction(new SessionExportAction());
 streamDeck.actions.registerAction(new PromptPresetAction());
+streamDeck.actions.registerAction(new TerminalTargetAction());
+streamDeck.actions.registerAction(new SessionPickerAction());
+streamDeck.actions.registerAction(new PermissionDetailsAction());
+streamDeck.actions.registerAction(new MacroAction());
+streamDeck.actions.registerAction(new McpStatusAction());
+
+// Multi-agent actions
+streamDeck.actions.registerAction(new AgentBadgeAction());
+streamDeck.actions.registerAction(new ActiveAgentDisplayAction());
+
+// Configuration
+streamDeck.actions.registerAction(new SettingsAction());
+
+// Phase 5: Advanced Features
+streamDeck.actions.registerAction(new SessionManagerAction());
+streamDeck.actions.registerAction(new UsageAnalyticsAction());
 
 // Connect to Stream Deck
 streamDeck.connect();

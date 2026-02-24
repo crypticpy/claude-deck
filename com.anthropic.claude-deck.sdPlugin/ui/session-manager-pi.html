@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Session Manager</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; background: #2d2d2d; color: #d4d4d4; padding: 12px; margin: 0; }
+    .section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #444; }
+    .section:last-child { border-bottom: none; }
+    .section-title { font-weight: 600; color: #fff; margin-bottom: 8px; font-size: 13px; }
+    .item { margin-bottom: 10px; }
+    .label { font-weight: 500; margin-bottom: 4px; color: #999; }
+    select, input[type="text"] { background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; padding: 6px 8px; width: 100%; box-sizing: border-box; }
+    button { background: #4c4c4c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; padding: 8px 12px; cursor: pointer; width: 100%; margin-top: 8px; }
+    button:hover { background: #5c5c5c; }
+    button.primary { background: #3b82f6; border-color: #2563eb; }
+    button.primary:hover { background: #2563eb; }
+    button.danger { background: #dc2626; border-color: #b91c1c; }
+    button.danger:hover { background: #b91c1c; }
+    .profile-list { max-height: 150px; overflow-y: auto; background: #3c3c3c; border: 1px solid #555; border-radius: 4px; margin-bottom: 8px; }
+    .profile-item { padding: 8px; border-bottom: 1px solid #555; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .profile-item:last-child { border-bottom: none; }
+    .profile-item:hover { background: #4c4c4c; }
+    .profile-item.selected { background: #3b82f6; color: white; }
+    .profile-name { font-weight: 500; }
+    .profile-meta { font-size: 10px; color: #888; }
+    .profile-item.selected .profile-meta { color: #ddd; }
+    .hint { font-size: 11px; color: #888; margin-top: 4px; }
+    .button-row { display: flex; gap: 8px; }
+    .button-row button { flex: 1; }
+  </style>
+</head>
+<body>
+  <div class="section">
+    <div class="section-title">Mode</div>
+    <div class="item">
+      <select id="actionMode">
+        <option value="toggle">Toggle (Save/Restore)</option>
+        <option value="save">Save Only</option>
+        <option value="restore">Restore Only</option>
+      </select>
+      <div class="hint">Toggle: saves if new, restores if profile exists</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Button Label</div>
+    <div class="item">
+      <input id="label" type="text" placeholder="Session" />
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Profiles</div>
+    <div class="profile-list" id="profileList">
+      <div class="profile-item" style="color: #888; text-align: center;">No profiles saved</div>
+    </div>
+    <div class="button-row">
+      <button id="refreshBtn">Refresh</button>
+      <button id="deleteBtn" class="danger">Delete</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">New Profile</div>
+    <div class="item">
+      <input id="newProfileName" type="text" placeholder="my-session" />
+    </div>
+    <button id="saveNewBtn" class="primary">Save Current State</button>
+    <div class="hint">Saves all running agents and their states</div>
+  </div>
+
+  <script>
+    let ws = null;
+    let pluginUUID = null;
+    let actionContext = null;
+    let settings = { actionMode: "toggle", profileName: "", label: "" };
+    let profiles = [];
+
+    function sendToPlugin(payload) {
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "sendToPlugin", context: actionContext, payload }));
+    }
+
+    function setSettings(next) {
+      settings = { ...settings, ...next };
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "setSettings", context: actionContext, payload: settings }));
+    }
+
+    function renderProfiles() {
+      const container = document.getElementById("profileList");
+      if (profiles.length === 0) {
+        container.innerHTML = '<div class="profile-item" style="color: #888; text-align: center;">No profiles saved</div>';
+        return;
+      }
+
+      container.innerHTML = "";
+      profiles.forEach(p => {
+        const item = document.createElement("div");
+        item.className = "profile-item" + (p.name === settings.profileName ? " selected" : "");
+
+        const date = new Date(p.updatedAt);
+        const dateStr = date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+        item.innerHTML = `
+          <div>
+            <div class="profile-name">${p.name}</div>
+            <div class="profile-meta">${p.agentCount} agent(s) · ${dateStr}</div>
+          </div>
+        `;
+        item.addEventListener("click", () => {
+          setSettings({ profileName: p.name });
+          renderProfiles();
+        });
+        container.appendChild(item);
+      });
+    }
+
+    function updateUI() {
+      document.getElementById("actionMode").value = settings.actionMode || "toggle";
+      document.getElementById("label").value = settings.label || "";
+      renderProfiles();
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo, inActionInfo) {
+      pluginUUID = inPluginUUID;
+      const actionInfo = JSON.parse(inActionInfo);
+      actionContext = actionInfo.context;
+      settings = actionInfo.payload?.settings || settings;
+
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: pluginUUID }));
+        ws.send(JSON.stringify({ event: "getSettings", context: actionContext }));
+        sendToPlugin({ type: "refresh" });
+      };
+      ws.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        if (d.event === "didReceiveSettings") {
+          settings = d.payload.settings || settings;
+          updateUI();
+        }
+        if (d.event === "sendToPropertyInspector") {
+          if (d.payload.profiles) {
+            profiles = d.payload.profiles;
+            renderProfiles();
+          }
+        }
+      };
+    }
+
+    document.getElementById("actionMode").addEventListener("change", (e) => setSettings({ actionMode: e.target.value }));
+    document.getElementById("label").addEventListener("change", (e) => setSettings({ label: e.target.value }));
+    document.getElementById("refreshBtn").addEventListener("click", () => sendToPlugin({ type: "refresh" }));
+    document.getElementById("deleteBtn").addEventListener("click", () => {
+      if (settings.profileName && confirm(`Delete profile "${settings.profileName}"?`)) {
+        sendToPlugin({ type: "deleteProfile", profileName: settings.profileName });
+        setSettings({ profileName: "" });
+      }
+    });
+    document.getElementById("saveNewBtn").addEventListener("click", () => {
+      const name = document.getElementById("newProfileName").value.trim();
+      if (name) {
+        sendToPlugin({ type: "saveProfile", profileName: name });
+        setSettings({ profileName: name });
+        document.getElementById("newProfileName").value = "";
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,5 +1,14 @@
-import { SingletonAction, type WillAppearEvent, type WillDisappearEvent, type KeyDownEvent } from "@elgato/streamdeck";
-import { claudeController, type ClaudeState } from "../utils/claude-controller.js";
+import {
+  SingletonAction,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+  type KeyDownEvent,
+} from "@elgato/streamdeck";
+import {
+  claudeAgent,
+  stateAggregator,
+  type AgentState,
+} from "../agents/index.js";
 
 /**
  * Model Display Action - Shows current model with visual badge
@@ -10,38 +19,40 @@ import { claudeController, type ClaudeState } from "../utils/claude-controller.j
 export class ModelDisplayAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.model-display";
 
-  private updateHandler?: (state: ClaudeState) => void;
-  private currentAction?: WillAppearEvent["action"];
+  private updateHandler?: (state: AgentState) => void;
+  private activeActions = new Map<string, WillAppearEvent["action"]>();
 
   constructor() {
     super();
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.currentAction = ev.action;
+    this.activeActions.set(ev.action.id, ev.action);
 
-    const state = claudeController.getState();
+    const state = claudeAgent.getState();
     await this.updateDisplay(ev.action, state);
 
-    this.updateHandler = async (newState: ClaudeState) => {
-      if (this.currentAction) {
-        await this.updateDisplay(this.currentAction, newState);
-      }
-    };
-    claudeController.on("stateChange", this.updateHandler);
+    if (!this.updateHandler) {
+      this.updateHandler = (newState: AgentState) => {
+        void this.updateAllWithState(newState).catch(() => {
+          // ignore
+        });
+      };
+      claudeAgent.on("stateChange", this.updateHandler);
+    }
   }
 
-  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
-    this.currentAction = undefined;
-    if (this.updateHandler) {
-      claudeController.off("stateChange", this.updateHandler);
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.activeActions.delete(ev.action.id);
+    if (this.activeActions.size === 0 && this.updateHandler) {
+      claudeAgent.off("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
   }
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     // Cycle to next model on press
-    const success = await claudeController.switchModel();
+    const success = await stateAggregator.cycleModel();
     if (success) {
       await ev.action.showOk();
     } else {
@@ -49,28 +60,43 @@ export class ModelDisplayAction extends SingletonAction {
     }
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"], state: ClaudeState): Promise<void> {
-    const model = state.currentModel || "sonnet";
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+    state: AgentState,
+  ): Promise<void> {
+    const model = state.model || "sonnet";
     const svg = this.createModelSvg(model);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
 
+  private async updateAllWithState(state: AgentState): Promise<void> {
+    if (this.activeActions.size === 0) return;
+    await Promise.allSettled(
+      [...this.activeActions.values()].map((action) =>
+        this.updateDisplay(action, state),
+      ),
+    );
+  }
+
   private createModelSvg(model: string): string {
-    const configs: Record<string, { color: string; bgColor: string; icon: string }> = {
+    const configs: Record<
+      string,
+      { color: string; bgColor: string; icon: string }
+    > = {
       opus: {
         color: "#a855f7",
         bgColor: "#2d1f3d",
-        icon: "◆" // Diamond for premium
+        icon: "◆", // Diamond for premium
       },
       sonnet: {
         color: "#f97316",
         bgColor: "#2d1f1a",
-        icon: "●" // Circle for balanced
+        icon: "●", // Circle for balanced
       },
       haiku: {
         color: "#06b6d4",
         bgColor: "#1a2d2d",
-        icon: "○" // Light circle for fast
+        icon: "○", // Light circle for fast
       },
     };
 

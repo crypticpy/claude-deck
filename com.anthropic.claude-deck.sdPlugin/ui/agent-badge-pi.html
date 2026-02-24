@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Agent Badge Settings</title>
+  <link rel="stylesheet" href="https://unpkg.com/@anthropic-ai/sdpi-components@latest/dist/sdpi.css">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #2D2D30;
+      color: #D4D4D4;
+      padding: 12px;
+      margin: 0;
+    }
+    .sdpi-wrapper {
+      margin-bottom: 12px;
+    }
+    .sdpi-item-label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: #9B9B9B;
+    }
+    select, input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #3C3C3C;
+      border-radius: 4px;
+      background: #3C3C3C;
+      color: #D4D4D4;
+      font-size: 12px;
+    }
+    select:focus, input:focus {
+      outline: none;
+      border-color: #007ACC;
+    }
+    .agent-preview {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      background: #252526;
+      border-radius: 4px;
+      margin-top: 8px;
+    }
+    .agent-color {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+    }
+    .agent-name {
+      font-weight: bold;
+    }
+    .help-text {
+      font-size: 11px;
+      color: #7A7A7A;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sdpi-wrapper">
+    <label class="sdpi-item-label">Agent</label>
+    <select id="agentId">
+      <option value="claude">Claude Code</option>
+      <option value="aider">Aider</option>
+      <option value="codex">Codex CLI</option>
+      <option value="gemini">Gemini CLI</option>
+      <option value="opencode">OpenCode</option>
+      <option value="factory">Factory Droid</option>
+    </select>
+  </div>
+
+  <div class="sdpi-wrapper">
+    <label class="sdpi-item-label">Long Press Duration (ms)</label>
+    <input type="number" id="longPressDuration" value="500" min="200" max="2000" step="100">
+  </div>
+
+  <div class="agent-preview" id="agentPreview">
+    <div class="agent-color" id="agentColor" style="background: #AF52DE;"></div>
+    <span class="agent-name" id="agentName">Claude Code</span>
+  </div>
+
+  <div class="help-text">
+    <strong>Short press:</strong> Switch focus to this agent<br>
+    <strong>Long press:</strong> Spawn new session in terminal
+  </div>
+
+  <script>
+    const AGENT_COLORS = {
+      claude: "#AF52DE",
+      aider: "#FFC107",
+      codex: "#00C853",
+      gemini: "#4285F4",
+      opencode: "#FF9800",
+      factory: "#00BCD4"
+    };
+
+    const AGENT_NAMES = {
+      claude: "Claude Code",
+      aider: "Aider",
+      codex: "Codex CLI",
+      gemini: "Gemini CLI",
+      opencode: "OpenCode",
+      factory: "Factory Droid"
+    };
+
+    let websocket = null;
+    let uuid = null;
+
+    function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo) {
+      uuid = inPluginUUID;
+
+      websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+
+      websocket.onopen = function() {
+        const json = {
+          event: inRegisterEvent,
+          uuid: inPluginUUID
+        };
+        websocket.send(JSON.stringify(json));
+
+        // Request settings
+        websocket.send(JSON.stringify({
+          event: "getSettings",
+          context: uuid
+        }));
+      };
+
+      websocket.onmessage = function(evt) {
+        const data = JSON.parse(evt.data);
+        if (data.event === "didReceiveSettings") {
+          const settings = data.payload.settings || {};
+          document.getElementById("agentId").value = settings.agentId || "claude";
+          document.getElementById("longPressDuration").value = settings.longPressDuration || 500;
+          updatePreview();
+        }
+      };
+    }
+
+    function saveSettings() {
+      const settings = {
+        agentId: document.getElementById("agentId").value,
+        longPressDuration: parseInt(document.getElementById("longPressDuration").value, 10)
+      };
+
+      if (websocket && websocket.readyState === WebSocket.OPEN) {
+        websocket.send(JSON.stringify({
+          event: "setSettings",
+          context: uuid,
+          payload: settings
+        }));
+      }
+
+      updatePreview();
+    }
+
+    function updatePreview() {
+      const agentId = document.getElementById("agentId").value;
+      document.getElementById("agentColor").style.background = AGENT_COLORS[agentId] || "#888888";
+      document.getElementById("agentName").textContent = AGENT_NAMES[agentId] || agentId;
+    }
+
+    document.getElementById("agentId").addEventListener("change", saveSettings);
+    document.getElementById("longPressDuration").addEventListener("change", saveSettings);
+
+    // Initialize preview
+    updatePreview();
+  </script>
+</body>
+</html>

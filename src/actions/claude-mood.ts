@@ -1,5 +1,9 @@
-import { SingletonAction, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { claudeController, type ClaudeState } from "../utils/claude-controller.js";
+import {
+  SingletonAction,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+} from "@elgato/streamdeck";
+import { claudeAgent, type AgentState } from "../agents/index.js";
 
 /**
  * Claude Mood Action - Animated face showing current activity state
@@ -7,41 +11,68 @@ import { claudeController, type ClaudeState } from "../utils/claude-controller.j
 export class ClaudeMoodAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.claude-mood";
 
-  private currentAction?: WillAppearEvent["action"];
+  private activeActions = new Map<string, WillAppearEvent["action"]>();
+  private updateHandler?: (state: AgentState) => void;
   private refreshInterval?: ReturnType<typeof setInterval>;
   private frame = 0;
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.currentAction = ev.action;
+    this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
 
-    claudeController.on("stateChange", async () => {
-      if (this.currentAction) await this.updateDisplay(this.currentAction);
-    });
+    if (!this.updateHandler) {
+      this.updateHandler = () => {
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      };
+      claudeAgent.on("stateChange", this.updateHandler);
+    }
 
     // Animate at 500ms for smooth transitions
-    this.refreshInterval = setInterval(() => {
-      if (this.currentAction) {
+    if (!this.refreshInterval) {
+      this.refreshInterval = setInterval(() => {
+        if (this.activeActions.size === 0) return;
         this.frame = (this.frame + 1) % 4;
-        this.updateDisplay(this.currentAction);
-      }
-    }, 500);
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      }, 500);
+    }
   }
 
-  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
-    this.currentAction = undefined;
-    if (this.refreshInterval) clearInterval(this.refreshInterval);
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.activeActions.delete(ev.action.id);
+    if (this.activeActions.size === 0 && this.updateHandler) {
+      claudeAgent.off("stateChange", this.updateHandler);
+      this.updateHandler = undefined;
+    }
+    if (this.activeActions.size === 0 && this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = undefined;
+    }
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
-    const state = claudeController.getState();
+  private async updateAll(): Promise<void> {
+    if (this.activeActions.size === 0) return;
+    await Promise.allSettled(
+      [...this.activeActions.values()].map((action) =>
+        this.updateDisplay(action),
+      ),
+    );
+  }
+
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
+    const state = claudeAgent.getState();
     const svg = this.createMoodSvg(state);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
 
-  private createMoodSvg(state: ClaudeState): string {
+  private createMoodSvg(state: AgentState): string {
     const status = state.status || "idle";
-    const isActive = state.sessionActive;
+    const isActive = state.status !== "disconnected";
 
     let faceColor = "#d97706"; // Orange Claude color
     let expression = "happy";
@@ -93,20 +124,28 @@ export class ClaudeMoodAction extends SingletonAction {
         <ellipse cx="60" cy="60" rx="5" ${eyeAnim || 'ry="5"'} fill="#0f172a"/>
         <ellipse cx="84" cy="60" rx="5" ${eyeAnim || 'ry="5"'} fill="#0f172a"/>
 
-        ${expression === "happy" || expression === "sleeping" ? `
+        ${
+          expression === "happy" || expression === "sleeping"
+            ? `
           <!-- Eye shine -->
           <circle cx="62" cy="58" r="2" fill="#ffffff" opacity="0.5"/>
           <circle cx="86" cy="58" r="2" fill="#ffffff" opacity="0.5"/>
-        ` : ""}
+        `
+            : ""
+        }
 
         <!-- Mouth -->
         <path d="${mouthPath}" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>
 
-        ${status === "working" ? `
+        ${
+          status === "working"
+            ? `
           <!-- Thinking dots -->
           <circle cx="100" cy="45" r="${3 + (this.frame % 3)}" fill="${faceColor}" opacity="0.6"/>
           <circle cx="110" cy="38" r="${2 + ((this.frame + 1) % 3)}" fill="${faceColor}" opacity="0.4"/>
-        ` : ""}
+        `
+            : ""
+        }
 
         <!-- Label -->
         <text x="72" y="118" font-family="system-ui" font-size="12" fill="${faceColor}" text-anchor="middle" font-weight="bold">${label}</text>

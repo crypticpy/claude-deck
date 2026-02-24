@@ -1,9 +1,8 @@
 import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { claudeController, type ClaudeState } from "../utils/claude-controller.js";
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Git Status Action - Shows current branch and uncommitted changes
@@ -11,7 +10,7 @@ const execAsync = promisify(exec);
 export class GitStatusAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.git-status";
 
-  private currentAction?: WillAppearEvent["action"];
+  private activeActions = new Map<string, WillAppearEvent["action"]>();
   private refreshInterval?: ReturnType<typeof setInterval>;
   private gitData: { branch: string; changes: number; ahead: number; behind: number } = {
     branch: "main",
@@ -25,22 +24,23 @@ export class GitStatusAction extends SingletonAction {
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.currentAction = ev.action;
+    this.activeActions.set(ev.action.id, ev.action);
     await this.loadGitStatus();
     await this.updateDisplay(ev.action);
 
     // Refresh git status every 10 seconds
-    this.refreshInterval = setInterval(async () => {
-      if (this.currentAction) {
-        await this.loadGitStatus();
-        await this.updateDisplay(this.currentAction);
-      }
-    }, 10000);
+    if (!this.refreshInterval) {
+      this.refreshInterval = setInterval(() => {
+        void this.refreshAll().catch(() => {
+          // ignore
+        });
+      }, 10000);
+    }
   }
 
-  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
-    this.currentAction = undefined;
-    if (this.refreshInterval) {
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.activeActions.delete(ev.action.id);
+    if (this.activeActions.size === 0 && this.refreshInterval) {
       clearInterval(this.refreshInterval);
       this.refreshInterval = undefined;
     }
@@ -57,31 +57,29 @@ export class GitStatusAction extends SingletonAction {
     }
   }
 
+  private async refreshAll(): Promise<void> {
+    if (this.activeActions.size === 0) return;
+    await this.loadGitStatus();
+    await Promise.allSettled([...this.activeActions.values()].map((action) => this.updateDisplay(action)));
+  }
+
   private async loadGitStatus(): Promise<void> {
     try {
-      // Get current branch
-      const { stdout: branch } = await execAsync("git branch --show-current 2>/dev/null || echo 'N/A'");
-      this.gitData.branch = branch.trim() || "N/A";
+      const { stdout: statusStdout } = await execFileAsync("git", ["status", "-sb"]);
+      const headerLine = statusStdout.split("\n")[0] ?? "";
 
-      // Get number of changed files
-      try {
-        const { stdout: changes } = await execAsync("git status --porcelain 2>/dev/null | wc -l");
-        this.gitData.changes = parseInt(changes.trim()) || 0;
-      } catch {
-        this.gitData.changes = 0;
-      }
+      const branchMatch = headerLine.match(/^##\s+([^\s]+)(?:\.\.\.[^\s]+)?(?:\s+\[(.+)\])?/);
+      this.gitData.branch = branchMatch?.[1] ?? "N/A";
 
-      // Get ahead/behind counts
-      try {
-        const { stdout: status } = await execAsync("git status -sb 2>/dev/null | head -1");
-        const aheadMatch = status.match(/ahead (\d+)/);
-        const behindMatch = status.match(/behind (\d+)/);
-        this.gitData.ahead = aheadMatch ? parseInt(aheadMatch[1]) : 0;
-        this.gitData.behind = behindMatch ? parseInt(behindMatch[1]) : 0;
-      } catch {
-        this.gitData.ahead = 0;
-        this.gitData.behind = 0;
-      }
+      const flags = branchMatch?.[2] ?? "";
+      const aheadMatch = flags.match(/ahead\s+(\d+)/);
+      const behindMatch = flags.match(/behind\s+(\d+)/);
+      this.gitData.ahead = aheadMatch ? Number.parseInt(aheadMatch[1], 10) : 0;
+      this.gitData.behind = behindMatch ? Number.parseInt(behindMatch[1], 10) : 0;
+
+      const { stdout: porcelain } = await execFileAsync("git", ["status", "--porcelain"]);
+      const changes = porcelain.split("\n").filter(Boolean).length;
+      this.gitData.changes = changes;
     } catch {
       // Not in a git repo
       this.gitData.branch = "N/A";

@@ -1,9 +1,5 @@
 import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { claudeController, type ClaudeState } from "../utils/claude-controller.js";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
-
-const execAsync = promisify(exec);
+import { claudeAgent, type AgentState } from "../agents/index.js";
 
 /**
  * Brain Search Action - Searches context-layer brain for lessons and insights
@@ -14,43 +10,43 @@ const execAsync = promisify(exec);
 export class BrainSearchAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.brain-search";
 
-  private updateHandler?: (state: ClaudeState) => void;
-  private currentAction?: WillAppearEvent["action"];
+  private updateHandler?: (state: AgentState) => void;
+  private activeActions = new Map<string, WillAppearEvent["action"]>();
   private refreshInterval?: ReturnType<typeof setInterval>;
-  private lastSearchResult?: string;
 
   constructor() {
     super();
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.currentAction = ev.action;
+    this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
 
-    this.updateHandler = async () => {
-      if (this.currentAction) {
-        await this.updateDisplay(this.currentAction);
-      }
-    };
-    claudeController.on("stateChange", this.updateHandler);
+    if (!this.updateHandler) {
+      this.updateHandler = () => {
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      };
+      claudeAgent.on("stateChange", this.updateHandler);
+    }
 
-    this.refreshInterval = setInterval(() => {
-      if (this.currentAction) {
-        this.updateDisplay(this.currentAction);
-      }
-    }, 5000);
-
-    // Load brain stats on appear
-    this.loadBrainStats();
+    if (!this.refreshInterval) {
+      this.refreshInterval = setInterval(() => {
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      }, 5000);
+    }
   }
 
-  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
-    this.currentAction = undefined;
-    if (this.updateHandler) {
-      claudeController.off("stateChange", this.updateHandler);
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.activeActions.delete(ev.action.id);
+    if (this.activeActions.size === 0 && this.updateHandler) {
+      claudeAgent.off("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
-    if (this.refreshInterval) {
+    if (this.activeActions.size === 0 && this.refreshInterval) {
       clearInterval(this.refreshInterval);
       this.refreshInterval = undefined;
     }
@@ -61,7 +57,7 @@ export class BrainSearchAction extends SingletonAction {
       await ev.action.setTitle("...");
 
       // Send brain search command to Claude
-      await claudeController.sendText("Search my brain for recent lessons and hot files");
+      await claudeAgent.sendText("Search my brain for recent lessons and hot files");
 
       await ev.action.showOk();
     } catch (error) {
@@ -70,16 +66,9 @@ export class BrainSearchAction extends SingletonAction {
     }
   }
 
-  private async loadBrainStats(): Promise<void> {
-    try {
-      // Try to read brain stats from context-layer
-      const { stdout } = await execAsync(
-        `mcp-cli call context-layer/brain_search '{"query": "recent", "sources": ["lessons", "hot-files"]}' 2>/dev/null | head -5`
-      );
-      this.lastSearchResult = stdout.trim();
-    } catch {
-      // MCP not available, that's ok
-    }
+  private async updateAll(): Promise<void> {
+    if (this.activeActions.size === 0) return;
+    await Promise.allSettled([...this.activeActions.values()].map((action) => this.updateDisplay(action)));
   }
 
   private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {

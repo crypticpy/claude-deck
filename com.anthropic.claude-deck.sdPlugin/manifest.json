@@ -13,10 +13,6 @@
     {
       "Platform": "mac",
       "MinimumVersion": "13"
-    },
-    {
-      "Platform": "windows",
-      "MinimumVersion": "10"
     }
   ],
   "Nodejs": {
@@ -27,6 +23,38 @@
   "Icon": "imgs/plugin-icon",
   "Category": "Claude Code",
   "CategoryIcon": "imgs/category-icon",
+  "Profiles": [
+    {
+      "Name": "Claude Control",
+      "DeviceType": 0,
+      "DontAutoSwitchWhenInstalled": true
+    },
+    {
+      "Name": "Claude Control (Mini)",
+      "DeviceType": 1,
+      "DontAutoSwitchWhenInstalled": true
+    },
+    {
+      "Name": "Claude Control (XL)",
+      "DeviceType": 2,
+      "DontAutoSwitchWhenInstalled": true
+    },
+    {
+      "Name": "Claude Control (Pedal)",
+      "DeviceType": 5,
+      "DontAutoSwitchWhenInstalled": true
+    },
+    {
+      "Name": "Claude Control (Plus)",
+      "DeviceType": 7,
+      "DontAutoSwitchWhenInstalled": true
+    },
+    {
+      "Name": "Claude Control (Neo)",
+      "DeviceType": 8,
+      "DontAutoSwitchWhenInstalled": true
+    }
+  ],
   "Actions": [
     {
       "UUID": "com.anthropic.claude-deck.approve",
@@ -497,6 +525,102 @@
       "Controllers": ["Keypad"],
       "States": [{ "Image": "imgs/actions/preset", "Title": "" }],
       "PropertyInspectorPath": "ui/prompt-preset-pi.html"
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.terminal-target",
+      "Name": "Terminal Target",
+      "Icon": "imgs/actions/status",
+      "Tooltip": "Shows terminal focus/running status and lets you switch terminal integration",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/status", "Title": "" }],
+      "PropertyInspectorPath": "ui/terminal-target-pi.html"
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.session-picker",
+      "Name": "Session Picker",
+      "Icon": "imgs/actions/continue",
+      "Tooltip": "Continue a specific Claude project session",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/continue", "Title": "" }],
+      "PropertyInspectorPath": "ui/session-picker-pi.html"
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.permission-details",
+      "Name": "Permission Details",
+      "Icon": "imgs/actions/activity",
+      "Tooltip": "Displays the current pending permission request details",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/activity", "Title": "" }]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.context-auto-compact",
+      "Name": "Context Auto-Compact",
+      "Icon": "imgs/actions/context-bar",
+      "Tooltip": "Shows context pressure and can auto-send /compact",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/context-bar", "Title": "" }],
+      "PropertyInspectorPath": "ui/context-auto-compact-pi.html"
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.macro",
+      "Name": "Macro",
+      "Icon": "imgs/actions/slash",
+      "Tooltip": "Run a configurable macro (focus, commands, delays)",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/slash", "Title": "" }],
+      "PropertyInspectorPath": "ui/macro-pi.html"
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.mcp-status",
+      "Name": "MCP Status",
+      "Icon": "imgs/actions/brain",
+      "Tooltip": "Shows configured MCP servers and provides optional reconnect/restart commands",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/brain", "Title": "" }],
+      "PropertyInspectorPath": "ui/mcp-status-pi.html"
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.agent-badge",
+      "Name": "Agent Badge",
+      "Icon": "imgs/actions/status",
+      "Tooltip": "Shows agent status - short press to switch, long press to spawn",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/status", "Title": "" }],
+      "PropertyInspectorPath": "ui/agent-badge-pi.html"
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.active-agent-display",
+      "Name": "Active Agent",
+      "Icon": "imgs/actions/status",
+      "Tooltip": "Shows the currently active/focused agent - press to cycle through agents",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/status", "Title": "" }]
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.settings",
+      "Name": "Settings",
+      "Icon": "imgs/actions/status",
+      "Tooltip": "Configure Claude Deck - terminal type, agents, layout mode",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/status", "Title": "" }],
+      "PropertyInspectorPath": "ui/settings-pi.html"
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.session-manager",
+      "Name": "Session Manager",
+      "Icon": "imgs/actions/continue",
+      "Tooltip": "Save and restore agent sessions - manage session profiles",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/continue", "Title": "" }],
+      "PropertyInspectorPath": "ui/session-manager-pi.html"
+    },
+    {
+      "UUID": "com.anthropic.claude-deck.usage-analytics",
+      "Name": "Usage Analytics",
+      "Icon": "imgs/actions/cost",
+      "Tooltip": "Aggregated usage stats across all agents - cost, tokens, time, tools",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/actions/cost", "Title": "" }]
     }
   ]
 }

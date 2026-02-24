@@ -1,11 +1,11 @@
 import { SingletonAction, type KeyDownEvent, type WillAppearEvent } from "@elgato/streamdeck";
-import { claudeController } from "../utils/claude-controller.js";
-import { exec } from "node:child_process";
+import { claudeAgent } from "../agents/index.js";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Screenshot to Claude Action - Captures screen and sends path to Claude for analysis
@@ -26,10 +26,10 @@ export class ScreenshotClaudeAction extends SingletonAction {
       const screenshotPath = join(homedir(), ".claude-deck", `screenshot-${timestamp}.png`);
 
       // Use screencapture command (macOS)
-      await execAsync(`screencapture -i "${screenshotPath}"`);
+      await execFileAsync("screencapture", ["-i", screenshotPath]);
 
       // Tell Claude to analyze the screenshot
-      await claudeController.sendText(`Please analyze this screenshot: ${screenshotPath}`);
+      await claudeAgent.sendText(`Please analyze this screenshot: ${screenshotPath}`);
 
       await ev.action.showOk();
     } catch (error) {

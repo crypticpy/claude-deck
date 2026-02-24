@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Macro</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; background: #2d2d2d; color: #d4d4d4; padding: 12px; margin: 0; }
+    .item { margin-bottom: 12px; }
+    .label { font-weight: 500; margin-bottom: 4px; color: #999; }
+    input, textarea, select, button { background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; padding: 6px 8px; width: 100%; box-sizing: border-box; }
+    textarea { min-height: 140px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    button { cursor: pointer; }
+    button:hover { background: #4c4c4c; }
+    .row { display: flex; gap: 8px; }
+    .row button { width: 33.33%; }
+    .hint { color: #94a3b8; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="item">
+    <div class="label">Preset</div>
+    <div class="row">
+      <button id="presetFocus">Focus</button>
+      <button id="presetReview">Review</button>
+      <button id="presetCommit">Commit</button>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="label">Label</div>
+    <input id="label" placeholder="Macro" />
+  </div>
+  <div class="item">
+    <div class="label">Color</div>
+    <input id="color" placeholder="#3b82f6" />
+  </div>
+  <div class="item">
+    <div class="label">Steps (JSON array)</div>
+    <textarea id="steps"></textarea>
+    <div class="hint">Supported steps: focusTerminal, sendText, sendKeystroke, delay, openTerminal.</div>
+  </div>
+
+  <button id="saveBtn">Save</button>
+
+  <script>
+    let ws = null;
+    let pluginUUID = null;
+    let actionContext = null;
+    let settings = { label: "Macro", color: "#3b82f6", steps: [] };
+
+    function sendToPlugin(payload) {
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "sendToPlugin", context: actionContext, payload }));
+    }
+
+    function setSettings(next) {
+      settings = { ...settings, ...next };
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "setSettings", context: actionContext, payload: settings }));
+    }
+
+    function render() {
+      document.getElementById("label").value = settings.label || "";
+      document.getElementById("color").value = settings.color || "";
+      document.getElementById("steps").value = JSON.stringify(settings.steps || [], null, 2);
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo, inActionInfo) {
+      pluginUUID = inPluginUUID;
+      const actionInfo = JSON.parse(inActionInfo);
+      actionContext = actionInfo.context;
+      settings = actionInfo.payload?.settings || settings;
+
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: pluginUUID }));
+        ws.send(JSON.stringify({ event: "getSettings", context: actionContext }));
+        sendToPlugin({ type: "refresh" });
+        render();
+      };
+      ws.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        if (d.event === "didReceiveSettings") {
+          settings = d.payload.settings || settings;
+          render();
+        }
+        if (d.event === "sendToPropertyInspector" && d.payload.settings) {
+          settings = d.payload.settings;
+          render();
+        }
+      };
+    }
+
+    function applyPreset(name) {
+      sendToPlugin({ type: "setPreset", preset: name });
+    }
+
+    document.getElementById("presetFocus").addEventListener("click", () => applyPreset("focus"));
+    document.getElementById("presetReview").addEventListener("click", () => applyPreset("review"));
+    document.getElementById("presetCommit").addEventListener("click", () => applyPreset("commit"));
+
+    document.getElementById("saveBtn").addEventListener("click", () => {
+      const label = document.getElementById("label").value;
+      const color = document.getElementById("color").value;
+      let steps = [];
+      try {
+        steps = JSON.parse(document.getElementById("steps").value || "[]");
+      } catch {
+        alert("Steps must be valid JSON");
+        return;
+      }
+      setSettings({ label, color, steps });
+    });
+  </script>
+</body>
+</html>
+

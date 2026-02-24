@@ -1,5 +1,5 @@
 import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { claudeController, type ClaudeState } from "../utils/claude-controller.js";
+import { claudeAgent } from "../agents/index.js";
 
 /**
  * Mistake Log Action - Quick-log mistakes to context-layer brain
@@ -10,7 +10,7 @@ import { claudeController, type ClaudeState } from "../utils/claude-controller.j
 export class MistakeLogAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.mistake-log";
 
-  private currentAction?: WillAppearEvent["action"];
+  private activeActions = new Map<string, WillAppearEvent["action"]>();
   private mistakeCount = 0;
 
   constructor() {
@@ -18,12 +18,12 @@ export class MistakeLogAction extends SingletonAction {
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.currentAction = ev.action;
+    this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
   }
 
-  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
-    this.currentAction = undefined;
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.activeActions.delete(ev.action.id);
   }
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
@@ -31,10 +31,10 @@ export class MistakeLogAction extends SingletonAction {
       await ev.action.setTitle("!");
 
       // Send mistake log command to Claude
-      await claudeController.sendText("Log this as a mistake: Something went wrong - please describe what happened and log it to my brain using mistake_log");
+      await claudeAgent.sendText("Log this as a mistake: Something went wrong - please describe what happened and log it to my brain using mistake_log");
 
       this.mistakeCount++;
-      await this.updateDisplay(ev.action);
+      await this.updateAll();
       await ev.action.showOk();
     } catch (error) {
       console.error("Mistake log failed:", error);
@@ -45,6 +45,10 @@ export class MistakeLogAction extends SingletonAction {
   private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
     const svg = this.createMistakeSvg();
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+  }
+
+  private async updateAll(): Promise<void> {
+    await Promise.allSettled([...this.activeActions.values()].map((action) => this.updateDisplay(action)));
   }
 
   private createMistakeSvg(): string {
@@ -62,7 +66,7 @@ export class MistakeLogAction extends SingletonAction {
 
         <!-- Label -->
         <text x="72" y="115" font-family="system-ui, sans-serif" font-size="11" fill="#ef4444" text-anchor="middle" font-weight="bold">MISTAKE</text>
-        <text x="72" y="130" font-family="system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Log to Brain</text>
+        <text x="72" y="130" font-family="system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Count: ${this.mistakeCount}</text>
       </svg>
     `;
   }

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Claude Deck Settings</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; background: #2d2d2d; color: #d4d4d4; padding: 12px; margin: 0; }
+    .section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #444; }
+    .section:last-child { border-bottom: none; }
+    .section-title { font-weight: 600; color: #fff; margin-bottom: 8px; font-size: 13px; }
+    .item { margin-bottom: 10px; }
+    .label { font-weight: 500; margin-bottom: 4px; color: #999; }
+    select, input[type="text"] { background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; padding: 6px 8px; width: 100%; box-sizing: border-box; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+    .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; }
+    .agent-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #3c3c3c; border-radius: 4px; margin-bottom: 4px; }
+    .agent-color { width: 12px; height: 12px; border-radius: 50%; }
+    .agent-name { flex: 1; }
+    .agent-status { font-size: 10px; color: #888; }
+    button { background: #4c4c4c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; padding: 8px 12px; cursor: pointer; width: 100%; margin-top: 8px; }
+    button:hover { background: #5c5c5c; }
+    button.primary { background: #3b82f6; border-color: #2563eb; }
+    button.primary:hover { background: #2563eb; }
+    .hint { font-size: 11px; color: #888; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="section">
+    <div class="section-title">Terminal</div>
+    <div class="item">
+      <div class="label">Terminal Application</div>
+      <select id="terminalType">
+        <option value="kitty">Kitty</option>
+        <option value="iterm2">iTerm2</option>
+        <option value="wezterm">WezTerm</option>
+        <option value="terminal">Terminal.app</option>
+        <option value="alacritty">Alacritty</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Layout</div>
+    <div class="item">
+      <div class="label">Layout Mode</div>
+      <select id="layoutMode">
+        <option value="primary">Primary (Universal controls + Tool Switcher)</option>
+        <option value="dashboard">Dashboard (Multi-agent monitoring)</option>
+        <option value="pages">Pages (Full control per agent)</option>
+      </select>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="autoSwitch" checked />
+      <label for="autoSwitch">Auto-switch agent on terminal focus</label>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="showInactive" checked />
+      <label for="showInactive">Show inactive/disconnected agents</label>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Agents</div>
+    <div id="agentList"></div>
+    <div class="hint">Enable/disable agents. Disabled agents won't appear in the tool switcher.</div>
+  </div>
+
+  <button id="saveBtn" class="primary">Save Settings</button>
+
+  <script>
+    let ws = null;
+    let pluginUUID = null;
+    let actionContext = null;
+    let currentConfig = null;
+    let agentInfo = [];
+
+    function sendToPlugin(payload) {
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "sendToPlugin", context: actionContext, payload }));
+    }
+
+    function renderAgents() {
+      const container = document.getElementById("agentList");
+      container.innerHTML = "";
+
+      agentInfo.forEach(agent => {
+        const enabled = currentConfig?.agents?.[agent.id]?.enabled ?? true;
+        const row = document.createElement("div");
+        row.className = "agent-row";
+        row.innerHTML = `
+          <input type="checkbox" id="agent-${agent.id}" ${enabled ? "checked" : ""} />
+          <div class="agent-color" style="background: ${agent.color}"></div>
+          <div class="agent-name">${agent.name}</div>
+          <div class="agent-status">${agent.installed ? "Installed" : "Not found"}</div>
+        `;
+        container.appendChild(row);
+
+        row.querySelector("input").addEventListener("change", (e) => {
+          if (!currentConfig.agents) currentConfig.agents = {};
+          if (!currentConfig.agents[agent.id]) currentConfig.agents[agent.id] = {};
+          currentConfig.agents[agent.id].enabled = e.target.checked;
+        });
+      });
+    }
+
+    function updateUI(config, agents) {
+      currentConfig = config || {};
+      agentInfo = agents || [];
+
+      document.getElementById("terminalType").value = config?.terminal?.type || "kitty";
+      document.getElementById("layoutMode").value = config?.layout?.mode || "primary";
+      document.getElementById("autoSwitch").checked = config?.autoSwitchOnFocus ?? true;
+      document.getElementById("showInactive").checked = config?.showInactiveAgents ?? true;
+
+      renderAgents();
+    }
+
+    function collectConfig() {
+      return {
+        terminal: { type: document.getElementById("terminalType").value },
+        layout: { mode: document.getElementById("layoutMode").value },
+        autoSwitchOnFocus: document.getElementById("autoSwitch").checked,
+        showInactiveAgents: document.getElementById("showInactive").checked,
+        agents: currentConfig?.agents || {},
+      };
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo, inActionInfo) {
+      pluginUUID = inPluginUUID;
+      const actionInfo = JSON.parse(inActionInfo);
+      actionContext = actionInfo.context;
+
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: pluginUUID }));
+        sendToPlugin({ type: "getConfig" });
+      };
+      ws.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        if (d.event === "sendToPropertyInspector") {
+          updateUI(d.payload.config, d.payload.agentInfo);
+        }
+      };
+    }
+
+    document.getElementById("saveBtn").addEventListener("click", () => {
+      const config = collectConfig();
+      sendToPlugin({ type: "saveConfig", config });
+    });
+  </script>
+</body>
+</html>

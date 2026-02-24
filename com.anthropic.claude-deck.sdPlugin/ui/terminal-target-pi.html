@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Terminal Target</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; background: #2d2d2d; color: #d4d4d4; padding: 12px; margin: 0; }
+    .item { margin-bottom: 12px; }
+    .label { font-weight: 500; margin-bottom: 4px; color: #999; }
+    select, button { background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; padding: 6px 8px; width: 100%; box-sizing: border-box; }
+    button { cursor: pointer; }
+    button:hover { background: #4c4c4c; }
+    .row { display: flex; gap: 8px; }
+    .row button { width: 50%; }
+    .status { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #cbd5e1; background: #1f2937; border: 1px solid #374151; border-radius: 4px; padding: 8px; }
+  </style>
+</head>
+<body>
+  <div class="item">
+    <div class="label">Terminal</div>
+    <select id="terminalType"></select>
+  </div>
+  <div class="item">
+    <div class="label">Status</div>
+    <div id="status" class="status">Loading…</div>
+  </div>
+  <div class="row">
+    <button id="refreshBtn">Refresh</button>
+    <button id="focusBtn">Focus</button>
+  </div>
+
+  <script>
+    let ws = null;
+    let pluginUUID = null;
+    let actionContext = null;
+    let current = null;
+
+    function sendToPlugin(payload) {
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "sendToPlugin", context: actionContext, payload }));
+    }
+
+    function setSettings(settings) {
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "setSettings", context: actionContext, payload: settings }));
+    }
+
+    function updateUI() {
+      if (!current) return;
+      const { terminalType, frontmostApp, isFocused, isRunning, supportedTerminals } = current;
+      const claude = current.claude || {};
+
+      const select = document.getElementById("terminalType");
+      select.innerHTML = "";
+      (supportedTerminals || []).forEach(t => {
+        const opt = document.createElement("option");
+        opt.value = t;
+        opt.textContent = t;
+        if (t === terminalType) opt.selected = true;
+        select.appendChild(opt);
+      });
+
+      const status = document.getElementById("status");
+      status.textContent =
+        `selected: ${terminalType}\n` +
+        `frontmost: ${frontmostApp || "unknown"}\n` +
+        `running: ${isRunning ? "yes" : "no"}\n` +
+        `focused: ${isFocused ? "yes" : "no"}\n` +
+        `claude: ${claude.sessionActive ? "active" : "inactive"} (${claude.status || "unknown"})`;
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo, inActionInfo) {
+      pluginUUID = inPluginUUID;
+      const actionInfo = JSON.parse(inActionInfo);
+      actionContext = actionInfo.context;
+
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: pluginUUID }));
+        ws.send(JSON.stringify({ event: "getSettings", context: actionContext }));
+        sendToPlugin({ type: "refresh" });
+      };
+      ws.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        if (d.event === "sendToPropertyInspector") {
+          current = d.payload;
+          updateUI();
+        }
+        if (d.event === "didReceiveSettings") {
+          // no-op; terminal selection is driven by sendToPropertyInspector
+        }
+      };
+    }
+
+    document.getElementById("terminalType").addEventListener("change", (e) => {
+      const value = e.target.value;
+      setSettings({ terminalType: value });
+      sendToPlugin({ type: "setTerminalType", terminalType: value });
+    });
+    document.getElementById("refreshBtn").addEventListener("click", () => sendToPlugin({ type: "refresh" }));
+    document.getElementById("focusBtn").addEventListener("click", () => sendToPlugin({ type: "focus" }));
+  </script>
+</body>
+</html>

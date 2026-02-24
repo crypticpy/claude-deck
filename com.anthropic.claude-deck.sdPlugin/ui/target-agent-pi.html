@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Target Agent Settings</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; background: #2d2d2d; color: #d4d4d4; padding: 12px; margin: 0; }
+    .item { margin-bottom: 12px; }
+    .label { font-weight: 500; margin-bottom: 4px; color: #999; }
+    select { background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; padding: 6px 8px; width: 100%; box-sizing: border-box; }
+    .hint { font-size: 11px; color: #888; margin-top: 4px; line-height: 1.4; }
+    .agent-option { display: flex; align-items: center; gap: 8px; }
+    .agent-color { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div class="item">
+    <div class="label">Target Agent</div>
+    <select id="targetAgent">
+      <option value="">Active Agent (follows focus)</option>
+      <option value="claude">Claude Code</option>
+      <option value="aider">Aider</option>
+      <option value="codex">Codex CLI</option>
+      <option value="gemini">Gemini CLI</option>
+      <option value="opencode">OpenCode</option>
+    </select>
+    <div class="hint">
+      <strong>Active Agent:</strong> Command goes to whichever agent is currently focused.<br>
+      <strong>Specific Agent:</strong> Command always goes to the selected agent (for Dashboard mode).
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let pluginUUID = null;
+    let actionContext = null;
+
+    function setSettings(settings) {
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "setSettings", context: actionContext, payload: settings }));
+    }
+
+    function updateUI(settings) {
+      const select = document.getElementById("targetAgent");
+      select.value = settings.targetAgent || "";
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo, inActionInfo) {
+      pluginUUID = inPluginUUID;
+      const actionInfo = JSON.parse(inActionInfo);
+      actionContext = actionInfo.context;
+
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: pluginUUID }));
+        ws.send(JSON.stringify({ event: "getSettings", context: actionContext }));
+      };
+      ws.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        if (d.event === "didReceiveSettings") {
+          updateUI(d.payload.settings || {});
+        }
+      };
+    }
+
+    document.getElementById("targetAgent").addEventListener("change", (e) => {
+      const value = e.target.value;
+      setSettings({ targetAgent: value || undefined });
+    });
+  </script>
+</body>
+</html>

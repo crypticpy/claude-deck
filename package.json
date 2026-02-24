@@ -22,23 +22,33 @@
     "anthropic"
   ],
   "type": "module",
-  "main": "dist/plugin.js",
+  "main": "com.anthropic.claude-deck.sdPlugin/bin/plugin.js",
   "scripts": {
-    "build": "rollup -c",
+    "build": "rollup -c --forceExit",
     "watch": "rollup -c -w",
     "dev": "npm run watch",
-    "lint": "eslint src/**/*.ts",
-    "typecheck": "tsc --noEmit"
+    "lint": "eslint . --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "generate-profiles": "npx tsx scripts/generate-profiles.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@elgato/cli": "^1.6.0",
     "@elgato/streamdeck": "^2.0.1",
+    "@rollup/plugin-commonjs": "^28.0.2",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-typescript": "^11.1.6",
+    "@types/archiver": "^6.0.3",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
     "@types/node": "^20.11.0",
+    "archiver": "^7.0.1",
     "eslint": "^8.56.0",
     "rollup": "^4.9.6",
-    "typescript": "^5.3.3"
+    "tsx": "^4.7.0",
+    "typescript": "~5.5.4"
   },
   "engines": {
     "node": ">=20"

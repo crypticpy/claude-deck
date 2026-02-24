@@ -1,10 +1,13 @@
 import { SingletonAction, type KeyDownEvent, type WillAppearEvent } from "@elgato/streamdeck";
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { copyFile, mkdir, stat, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Session Export Action - Exports current session transcript
@@ -21,22 +24,48 @@ export class SessionExportAction extends SingletonAction {
       await ev.action.setTitle("...");
 
       // Find most recent transcript
-      const { stdout: transcriptPath } = await execAsync(
-        `find ~/.claude/projects -name "*.jsonl" -mmin -60 2>/dev/null | head -1`
-      );
+      const projectsDir = join(homedir(), ".claude", "projects");
+      const { stdout } = await execFileAsync("find", [projectsDir, "-name", "*.jsonl", "-mmin", "-60", "-print"]);
+      const candidates = stdout.split("\n").filter(Boolean);
 
-      if (transcriptPath.trim()) {
+      let transcriptPath = "";
+      let newestMtime = 0;
+      for (const candidate of candidates) {
+        try {
+          const s = await stat(candidate);
+          if (s.mtimeMs > newestMtime) {
+            newestMtime = s.mtimeMs;
+            transcriptPath = candidate;
+          }
+        } catch {
+          // ignore unreadable candidates
+        }
+      }
+
+      if (transcriptPath) {
         // Copy to exports folder with timestamp
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         const exportDir = join(homedir(), ".claude-deck", "exports");
         const exportPath = join(exportDir, `session-${timestamp}.jsonl`);
 
-        await execAsync(`mkdir -p "${exportDir}"`);
-        await execAsync(`cp "${transcriptPath.trim()}" "${exportPath}"`);
+        await mkdir(exportDir, { recursive: true });
+        await copyFile(transcriptPath, exportPath);
 
         // Also create a readable version
         const readablePath = exportPath.replace(".jsonl", ".txt");
-        await execAsync(`cat "${transcriptPath.trim()}" | jq -r '.content // .message // empty' > "${readablePath}" 2>/dev/null || true`);
+        const rl = createInterface({ input: createReadStream(transcriptPath), crlfDelay: Infinity });
+        const lines: string[] = [];
+        for await (const line of rl) {
+          try {
+            const obj = JSON.parse(line) as Record<string, unknown>;
+            const msg = obj.content ?? obj.message;
+            if (typeof msg === "string" && msg.trim()) lines.push(msg.trim());
+          } catch {
+            // ignore malformed lines
+          }
+        }
+        rl.close();
+        await writeFile(readablePath, lines.join("\n\n"));
 
         await ev.action.showOk();
       } else {

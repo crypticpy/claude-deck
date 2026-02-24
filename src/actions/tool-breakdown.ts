@@ -1,5 +1,9 @@
-import { SingletonAction, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { claudeController, type ClaudeState } from "../utils/claude-controller.js";
+import {
+  SingletonAction,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+} from "@elgato/streamdeck";
+import { claudeAgent, type AgentState } from "../agents/index.js";
 
 /**
  * Tool Breakdown Action - Pie chart showing tool usage distribution
@@ -7,55 +11,92 @@ import { claudeController, type ClaudeState } from "../utils/claude-controller.j
 export class ToolBreakdownAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.tool-breakdown";
 
-  private currentAction?: WillAppearEvent["action"];
+  private activeActions = new Map<string, WillAppearEvent["action"]>();
+  private updateHandler?: (state: AgentState) => void;
   private refreshInterval?: ReturnType<typeof setInterval>;
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.currentAction = ev.action;
+    this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
 
-    claudeController.on("stateChange", async () => {
-      if (this.currentAction) await this.updateDisplay(this.currentAction);
-    });
+    if (!this.updateHandler) {
+      this.updateHandler = () => {
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      };
+      claudeAgent.on("stateChange", this.updateHandler);
+    }
 
-    this.refreshInterval = setInterval(() => {
-      if (this.currentAction) this.updateDisplay(this.currentAction);
-    }, 3000);
+    if (!this.refreshInterval) {
+      this.refreshInterval = setInterval(() => {
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      }, 3000);
+    }
   }
 
-  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
-    this.currentAction = undefined;
-    if (this.refreshInterval) clearInterval(this.refreshInterval);
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.activeActions.delete(ev.action.id);
+    if (this.activeActions.size === 0 && this.updateHandler) {
+      claudeAgent.off("stateChange", this.updateHandler);
+      this.updateHandler = undefined;
+    }
+    if (this.activeActions.size === 0 && this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = undefined;
+    }
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
-    const state = claudeController.getState();
+  private async updateAll(): Promise<void> {
+    if (this.activeActions.size === 0) return;
+    await Promise.allSettled(
+      [...this.activeActions.values()].map((action) =>
+        this.updateDisplay(action),
+      ),
+    );
+  }
+
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
+    const state = claudeAgent.getState();
     const svg = this.createPieChartSvg(state);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
 
-  private createPieChartSvg(state: ClaudeState): string {
-    // Tool counts from state (would need hook updates to track these)
-    const tools = (state as any).toolBreakdown || { Bash: 40, Read: 30, Edit: 20, Write: 10 };
-    const total = Object.values(tools).reduce((a: number, b: any) => a + (b as number), 0) || 1;
+  private createPieChartSvg(state: AgentState): string {
+    // Tool counts from state (populated by hooks if available)
+    const tools: Record<string, number> =
+      state.toolUsage && Object.keys(state.toolUsage).length > 0
+        ? state.toolUsage
+        : {};
+    const total = Object.values(tools).reduce((a, b) => a + b, 0) || 1;
 
     const colors: Record<string, string> = {
-      Bash: "#22c55e", Read: "#3b82f6", Edit: "#f59e0b", Write: "#ef4444", Other: "#8b5cf6"
+      Bash: "#22c55e",
+      Read: "#3b82f6",
+      Edit: "#f59e0b",
+      Write: "#ef4444",
+      Other: "#8b5cf6",
     };
 
     let paths = "";
     let startAngle = 0;
-    const cx = 72, cy = 55, r = 35;
+    const cx = 72,
+      cy = 55,
+      r = 35;
 
     for (const [tool, count] of Object.entries(tools)) {
       const pct = (count as number) / total;
       const angle = pct * 360;
       const endAngle = startAngle + angle;
 
-      const x1 = cx + r * Math.cos((startAngle - 90) * Math.PI / 180);
-      const y1 = cy + r * Math.sin((startAngle - 90) * Math.PI / 180);
-      const x2 = cx + r * Math.cos((endAngle - 90) * Math.PI / 180);
-      const y2 = cy + r * Math.sin((endAngle - 90) * Math.PI / 180);
+      const x1 = cx + r * Math.cos(((startAngle - 90) * Math.PI) / 180);
+      const y1 = cy + r * Math.sin(((startAngle - 90) * Math.PI) / 180);
+      const x2 = cx + r * Math.cos(((endAngle - 90) * Math.PI) / 180);
+      const y2 = cy + r * Math.sin(((endAngle - 90) * Math.PI) / 180);
 
       const largeArc = angle > 180 ? 1 : 0;
       const color = colors[tool] || colors.Other;
@@ -66,7 +107,9 @@ export class ToolBreakdownAction extends SingletonAction {
       startAngle = endAngle;
     }
 
-    const toolCount = state.toolCallCount || 0;
+    const toolCount = state.toolUsage
+      ? Object.values(state.toolUsage).reduce((sum, count) => sum + count, 0)
+      : 0;
 
     return `
       <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">

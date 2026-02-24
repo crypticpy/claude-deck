@@ -1,73 +1,96 @@
-import streamDeck, { action, SingletonAction, type KeyDownEvent, type WillAppearEvent } from "@elgato/streamdeck";
-import { claudeController, type ClaudeState } from "../utils/claude-controller.js";
-
-type PermissionMode = ClaudeState["permissionMode"];
+import streamDeck, { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
+import { stateAggregator, type AggregatedState, type PermissionMode, claudeAgent } from "../agents/index.js";
 
 /**
- * Mode Cycle Action - Cycles through permission modes (Shift+Tab)
- * Modes: default → plan → acceptEdits → bypassPermissions → default
+ * Mode Cycle Action - Cycles through permission modes for the active agent
  *
- * Note: Mode is tracked locally in state.json. If you change mode via keyboard
- * (Shift+Tab) in Claude, the button won't know. Use the button for accurate tracking.
+ * This action works with any agent that supports mode cycling (primarily Claude).
+ * If the active agent doesn't support mode cycling, it will show an alert.
+ *
+ * Mode tracking:
+ * - Reads initial mode from state.json on appear
+ * - After cycling, calculates next mode and persists to state.json
+ * - Resets to "default" on session-start (via hooks)
  */
-@action({ UUID: "com.anthropic.claude-deck.mode-cycle" })
 export class ModeCycleAction extends SingletonAction {
-  private updateInterval?: ReturnType<typeof setInterval>;
+  manifestId = "com.anthropic.claude-deck.mode-cycle";
 
-  // Cycle: NORMAL → PLAN → EDITS (no YOLO - requires CLI flag)
-  private modes: PermissionMode[] = ["default", "plan", "acceptEdits"];
+  private activeActions = new Map<string, WillAppearEvent["action"]>();
+  private updateHandler?: (state: AggregatedState) => void;
 
-  private modeColors: Record<PermissionMode, string> = {
+  // Mode cycle order (Claude's Shift+Tab order)
+  private static readonly MODE_ORDER: PermissionMode[] = [
+    "default",
+    "plan",
+    "acceptEdits",
+    "dontAsk",
+    "bypassPermissions",
+  ];
+
+  private modeColors: Record<string, string> = {
     default: "#6b7280",           // gray
     plan: "#3b82f6",              // blue
     acceptEdits: "#f59e0b",       // amber
     dontAsk: "#ef4444",           // red
     bypassPermissions: "#22c55e", // green (yolo)
+    yolo: "#22c55e",              // alias
+    auto: "#ef4444",              // alias
   };
 
-  private modeLabels: Record<PermissionMode, string> = {
+  private modeLabels: Record<string, string> = {
     default: "NORMAL",
     plan: "PLAN",
     acceptEdits: "EDITS",
     dontAsk: "AUTO",
     bypassPermissions: "YOLO",
+    yolo: "YOLO",
+    auto: "AUTO",
   };
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    await this.updateDisplay(ev);
+    this.activeActions.set(ev.action.id, ev.action);
+    await this.updateDisplay(ev.action);
 
-    // Poll state file to stay in sync
-    this.updateInterval = setInterval(async () => {
-      await this.updateDisplay(ev);
-    }, 500);
+    if (!this.updateHandler) {
+      this.updateHandler = () => {
+        void this.updateAllDisplays().catch((err) => {
+          streamDeck.logger.debug("ModeCycleAction update failed:", err);
+        });
+      };
+      stateAggregator.on("stateChange", this.updateHandler);
+    }
   }
 
-  override async onWillDisappear(): Promise<void> {
-    if (this.updateInterval) {
-      clearInterval(this.updateInterval);
-      this.updateInterval = undefined;
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.activeActions.delete(ev.action.id);
+    if (this.activeActions.size === 0 && this.updateHandler) {
+      stateAggregator.off("stateChange", this.updateHandler);
+      this.updateHandler = undefined;
     }
   }
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     try {
-      // Get current mode from state
-      const state = claudeController.getState();
-      const currentMode = state.permissionMode || "default";
+      const activeAgent = stateAggregator.getActiveAgent();
+      const agentState = activeAgent ? stateAggregator.getAgentState(activeAgent.id) : null;
 
-      // Calculate next mode
-      const currentIndex = this.modes.indexOf(currentMode);
-      const nextIndex = (currentIndex + 1) % this.modes.length;
-      const nextMode = this.modes[nextIndex];
+      // Check if active agent supports mode cycling
+      if (!activeAgent || !activeAgent.capabilities.modeSwitch) {
+        await ev.action.showAlert();
+        return;
+      }
 
-      // Send Shift+Tab to Claude to cycle mode
-      const success = await claudeController.togglePermissionMode();
+      // Send mode cycle to active agent
+      const success = await stateAggregator.cycleMode();
 
       if (success) {
-        // Update state.json with new mode
-        await claudeController.setPermissionMode(nextMode);
+        // Calculate and persist the next mode (for Claude agent)
+        if (activeAgent.id === "claude") {
+          const currentMode = (agentState?.mode as PermissionMode) || "default";
+          const nextMode = this.getNextMode(currentMode);
+          await claudeAgent.setPermissionMode(nextMode);
+        }
         await ev.action.showOk();
-        await this.updateDisplay(ev);
       } else {
         await ev.action.showAlert();
       }
@@ -77,15 +100,31 @@ export class ModeCycleAction extends SingletonAction {
     }
   }
 
-  private async updateDisplay(ev: WillAppearEvent | KeyDownEvent): Promise<void> {
-    const state = claudeController.getState();
-    const mode = state.permissionMode || "default";
+  /**
+   * Calculate the next mode in the cycle
+   */
+  private getNextMode(currentMode: PermissionMode): PermissionMode {
+    const currentIndex = ModeCycleAction.MODE_ORDER.indexOf(currentMode);
+    const nextIndex = (currentIndex + 1) % ModeCycleAction.MODE_ORDER.length;
+    return ModeCycleAction.MODE_ORDER[nextIndex];
+  }
+
+  private async updateAllDisplays(): Promise<void> {
+    if (this.activeActions.size === 0) return;
+    await Promise.allSettled([...this.activeActions.values()].map((action) => this.updateDisplay(action)));
+  }
+
+  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+    const activeAgent = stateAggregator.getActiveAgent();
+    const agentState = activeAgent ? stateAggregator.getAgentState(activeAgent.id) : null;
+
+    const mode = (agentState?.mode as PermissionMode) || "default";
     const color = this.modeColors[mode] || this.modeColors.default;
     const label = this.modeLabels[mode] || mode.toUpperCase();
 
     const svg = this.generateModeSvg(label, color);
     const base64 = Buffer.from(svg).toString("base64");
-    await ev.action.setImage(`data:image/svg+xml;base64,${base64}`);
+    await action.setImage(`data:image/svg+xml;base64,${base64}`);
   }
 
   private generateModeSvg(label: string, color: string): string {

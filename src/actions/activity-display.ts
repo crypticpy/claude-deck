@@ -1,5 +1,9 @@
-import { SingletonAction, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { claudeController, type ClaudeState } from "../utils/claude-controller.js";
+import {
+  SingletonAction,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+} from "@elgato/streamdeck";
+import { claudeAgent, type AgentState } from "../agents/index.js";
 
 /**
  * Activity Display Action - Shows current Claude activity and recent tool calls
@@ -12,8 +16,8 @@ import { claudeController, type ClaudeState } from "../utils/claude-controller.j
 export class ActivityDisplayAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.activity-display";
 
-  private updateHandler?: (state: ClaudeState) => void;
-  private currentAction?: WillAppearEvent["action"];
+  private updateHandler?: (state: AgentState) => void;
+  private activeActions = new Map<string, WillAppearEvent["action"]>();
   private refreshInterval?: ReturnType<typeof setInterval>;
 
   constructor() {
@@ -21,47 +25,71 @@ export class ActivityDisplayAction extends SingletonAction {
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.currentAction = ev.action;
+    this.activeActions.set(ev.action.id, ev.action);
 
-    const state = claudeController.getState();
+    const state = claudeAgent.getState();
     await this.updateDisplay(ev.action, state);
 
-    this.updateHandler = async (newState: ClaudeState) => {
-      if (this.currentAction) {
-        await this.updateDisplay(this.currentAction, newState);
-      }
-    };
-    claudeController.on("stateChange", this.updateHandler);
+    if (!this.updateHandler) {
+      this.updateHandler = (newState: AgentState) => {
+        void this.updateAllWithState(newState).catch(() => {
+          // ignore
+        });
+      };
+      claudeAgent.on("stateChange", this.updateHandler);
+    }
 
     // Refresh every second for live feel
-    this.refreshInterval = setInterval(() => {
-      if (this.currentAction) {
-        claudeController.refreshState().then(state => {
-          this.updateDisplay(this.currentAction!, state);
+    if (!this.refreshInterval) {
+      this.refreshInterval = setInterval(() => {
+        void this.refreshAll().catch(() => {
+          // ignore
         });
-      }
-    }, 1000);
+      }, 3000);
+    }
   }
 
-  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
-    this.currentAction = undefined;
-    if (this.updateHandler) {
-      claudeController.off("stateChange", this.updateHandler);
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.activeActions.delete(ev.action.id);
+
+    if (this.activeActions.size === 0 && this.updateHandler) {
+      claudeAgent.off("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
-    if (this.refreshInterval) {
+    if (this.activeActions.size === 0 && this.refreshInterval) {
       clearInterval(this.refreshInterval);
       this.refreshInterval = undefined;
     }
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"], state: ClaudeState): Promise<void> {
+  private async refreshAll(): Promise<void> {
+    if (this.activeActions.size === 0) return;
+    const state = await claudeAgent.refreshState();
+    await this.updateAllWithState(state);
+  }
+
+  private async updateAllWithState(state: AgentState): Promise<void> {
+    if (this.activeActions.size === 0) return;
+    await Promise.allSettled(
+      [...this.activeActions.values()].map((action) =>
+        this.updateDisplay(action, state),
+      ),
+    );
+  }
+
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+    state: AgentState,
+  ): Promise<void> {
     const svg = this.createActivitySvg(state);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
 
-  private createActivitySvg(state: ClaudeState): string {
-    const statusConfigs: Record<string, { color: string; icon: string; pulse: boolean }> = {
+  private createActivitySvg(state: AgentState): string {
+    const statusConfigs: Record<
+      string,
+      { color: string; icon: string; pulse: boolean }
+    > = {
       idle: { color: "#6b7280", icon: "○", pulse: false },
       working: { color: "#22c55e", icon: "●", pulse: true },
       waiting: { color: "#eab308", icon: "◐", pulse: true },
@@ -69,14 +97,19 @@ export class ActivityDisplayAction extends SingletonAction {
     };
 
     const config = statusConfigs[state.status] || statusConfigs.idle;
-    const lastTool = state.lastTool || "—";
-    const toolCount = state.toolCallCount || 0;
-    const statusText = state.status.charAt(0).toUpperCase() + state.status.slice(1);
+    const toolEntries = state.toolUsage ? Object.entries(state.toolUsage) : [];
+    const lastTool =
+      toolEntries.length > 0 ? toolEntries[toolEntries.length - 1][0] : "—";
+    const toolCount = toolEntries.reduce((sum, [, count]) => sum + count, 0);
+    const statusText =
+      state.status.charAt(0).toUpperCase() + state.status.slice(1);
 
     // Animated pulse for active states
-    const pulseAnimation = config.pulse ? `
+    const pulseAnimation = config.pulse
+      ? `
       <animate attributeName="opacity" values="1;0.5;1" dur="1.5s" repeatCount="indefinite"/>
-    ` : '';
+    `
+      : "";
 
     return `
       <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">

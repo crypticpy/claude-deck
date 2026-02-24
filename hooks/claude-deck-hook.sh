@@ -36,6 +36,11 @@ if [ ! -f "$STATE_FILE" ]; then
   "status": "idle",
   "tokens": { "input": 0, "output": 0 },
   "toolCallCount": 0,
+  "toolUsage": {},
+  "sessionCost": 0,
+  "contextSize": 200000,
+  "contextUsed": 0,
+  "contextPercent": 0,
   "lastUpdated": ""
 }
 EOF
@@ -139,8 +144,10 @@ case "$EVENT" in
             state=$(echo "$state" | jq --arg t "$now" '
                 .sessionActive = true |
                 .status = "idle" |
+                .permissionMode = "default" |
                 .tokens = { input: 0, output: 0 } |
                 .toolCallCount = 0 |
+                .toolUsage = {} |
                 .sessionStartTime = $t |
                 .lastUpdated = $t
             ')
@@ -148,6 +155,7 @@ case "$EVENT" in
         else
             update_field "sessionActive" "true"
             update_field "status" "idle"
+            update_field "permissionMode" "default"
         fi
         ;;
 
@@ -158,9 +166,23 @@ case "$EVENT" in
 
     tool-use)
         TOOL_NAME="${1:-unknown}"
-        update_field "status" "working"
-        update_field "lastTool" "$TOOL_NAME"
-        increment_tool_count
+        if command -v jq &> /dev/null; then
+            state=$(read_state)
+            now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            state=$(echo "$state" | jq --arg tool "$TOOL_NAME" --arg t "$now" '
+                .status = "working" |
+                .lastTool = $tool |
+                .toolCallCount = (.toolCallCount // 0) + 1 |
+                .toolUsage = (.toolUsage // {}) |
+                .toolUsage[$tool] = ((.toolUsage[$tool] // 0) + 1) |
+                .lastUpdated = $t
+            ')
+            write_state "$state"
+        else
+            update_field "status" "working"
+            update_field "lastTool" "$TOOL_NAME"
+            increment_tool_count
+        fi
         ;;
 
     tool-complete)
@@ -176,7 +198,7 @@ case "$EVENT" in
             state=$(read_state)
             now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             state=$(echo "$state" | jq --arg tool "$TOOL_NAME" --arg t "$now" '
-                .pendingPermission = { tool: $tool, type: "permission" } |
+                .pendingPermission = { tool: $tool, type: "permission", requestedAt: $t } |
                 .lastUpdated = $t
             ')
             write_state "$state"
@@ -215,6 +237,26 @@ case "$EVENT" in
         INPUT="${1:-0}"
         OUTPUT="${2:-0}"
         update_tokens "$INPUT" "$OUTPUT"
+        ;;
+
+    context)
+        # context <size> <used> <percent> <cost>
+        SIZE="${1:-0}"
+        USED="${2:-0}"
+        PCT="${3:-0}"
+        COST="${4:-0}"
+        if command -v jq &> /dev/null; then
+            state=$(read_state)
+            now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            state=$(echo "$state" | jq --arg t "$now" --argjson size "$SIZE" --argjson used "$USED" --argjson pct "$PCT" --argjson cost "$COST" '
+                .contextSize = $size |
+                .contextUsed = $used |
+                .contextPercent = $pct |
+                .sessionCost = $cost |
+                .lastUpdated = $t
+            ')
+            write_state "$state"
+        fi
         ;;
 
     status)

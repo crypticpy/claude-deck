@@ -1,5 +1,9 @@
-import { SingletonAction, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { claudeController, type ClaudeState } from "../utils/claude-controller.js";
+import {
+  SingletonAction,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+} from "@elgato/streamdeck";
+import { claudeAgent } from "../agents/index.js";
 
 /**
  * Token Display Action - Shows current token usage on the button
@@ -13,8 +17,8 @@ import { claudeController, type ClaudeState } from "../utils/claude-controller.j
 export class TokenDisplayAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.token-display";
 
-  private updateHandler?: (state: ClaudeState) => void;
-  private currentAction?: WillAppearEvent["action"];
+  private activeActions = new Map<string, WillAppearEvent["action"]>();
+  private updateHandler?: () => void;
   private refreshInterval?: ReturnType<typeof setInterval>;
 
   constructor() {
@@ -22,41 +26,54 @@ export class TokenDisplayAction extends SingletonAction {
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.currentAction = ev.action;
-
-    // Initial display
+    this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
 
-    // Subscribe to state changes
-    this.updateHandler = async () => {
-      if (this.currentAction) {
-        await this.updateDisplay(this.currentAction);
-      }
-    };
-    claudeController.on("stateChange", this.updateHandler);
+    if (!this.updateHandler) {
+      this.updateHandler = () => {
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      };
+      claudeAgent.on("stateChange", this.updateHandler);
+    }
 
     // Also poll every 2 seconds for token updates
-    this.refreshInterval = setInterval(() => {
-      if (this.currentAction) {
-        this.updateDisplay(this.currentAction);
-      }
-    }, 2000);
+    if (!this.refreshInterval) {
+      this.refreshInterval = setInterval(() => {
+        void this.updateAll().catch(() => {
+          // ignore
+        });
+      }, 2000);
+    }
   }
 
-  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
-    this.currentAction = undefined;
-    if (this.updateHandler) {
-      claudeController.off("stateChange", this.updateHandler);
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.activeActions.delete(ev.action.id);
+
+    if (this.activeActions.size === 0 && this.updateHandler) {
+      claudeAgent.off("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
-    if (this.refreshInterval) {
+    if (this.activeActions.size === 0 && this.refreshInterval) {
       clearInterval(this.refreshInterval);
       this.refreshInterval = undefined;
     }
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
-    const state = claudeController.getState();
+  private async updateAll(): Promise<void> {
+    if (this.activeActions.size === 0) return;
+    await Promise.allSettled(
+      [...this.activeActions.values()].map((action) =>
+        this.updateDisplay(action),
+      ),
+    );
+  }
+
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
+    const state = claudeAgent.getState();
     const tokens = state.tokens || { input: 0, output: 0 };
     const total = tokens.input + tokens.output;
 
@@ -71,7 +88,7 @@ export class TokenDisplayAction extends SingletonAction {
     const svg = this.createTokenSvg(
       formatTokens(tokens.input),
       formatTokens(tokens.output),
-      formatTokens(total)
+      formatTokens(total),
     );
 
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);

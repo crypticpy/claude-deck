@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Context Auto-Compact</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; background: #2d2d2d; color: #d4d4d4; padding: 12px; margin: 0; }
+    .item { margin-bottom: 12px; }
+    .label { font-weight: 500; margin-bottom: 4px; color: #999; }
+    input, button { background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; padding: 6px 8px; width: 100%; box-sizing: border-box; }
+    button { cursor: pointer; }
+    button:hover { background: #4c4c4c; }
+    .row { display: flex; gap: 8px; }
+    .row input { width: 50%; }
+    .hint { color: #94a3b8; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="item">
+    <div class="label">Button Label</div>
+    <input id="label" placeholder="Compact" />
+  </div>
+  <div class="item">
+    <div class="label">Threshold (%)</div>
+    <input id="threshold" type="number" min="1" max="100" />
+  </div>
+  <div class="item">
+    <div class="label">Command</div>
+    <input id="command" placeholder="/compact" />
+  </div>
+  <div class="item">
+    <div class="label">Auto-send (terminal focused)</div>
+    <div class="row">
+      <button id="autoOff">Off</button>
+      <button id="autoOn">On</button>
+    </div>
+    <div id="autoHint" class="hint"></div>
+  </div>
+  <button id="refreshBtn">Refresh</button>
+
+  <script>
+    let ws = null;
+    let pluginUUID = null;
+    let actionContext = null;
+    let settings = { label: "Compact", thresholdPercent: 77, autoSend: false, command: "/compact" };
+
+    function sendToPlugin(payload) {
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "sendToPlugin", context: actionContext, payload }));
+    }
+
+    function setSettings(next) {
+      settings = { ...settings, ...next };
+      if (!ws || !actionContext) return;
+      ws.send(JSON.stringify({ event: "setSettings", context: actionContext, payload: settings }));
+      render();
+    }
+
+    function render() {
+      document.getElementById("label").value = settings.label || "";
+      document.getElementById("threshold").value = settings.thresholdPercent ?? 77;
+      document.getElementById("command").value = settings.command || "/compact";
+      document.getElementById("autoHint").textContent = settings.autoSend ? "Auto-send enabled" : "Auto-send disabled";
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo, inActionInfo) {
+      pluginUUID = inPluginUUID;
+      const actionInfo = JSON.parse(inActionInfo);
+      actionContext = actionInfo.context;
+      settings = actionInfo.payload?.settings || settings;
+
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: pluginUUID }));
+        ws.send(JSON.stringify({ event: "getSettings", context: actionContext }));
+        sendToPlugin({ type: "refresh" });
+        render();
+      };
+      ws.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        if (d.event === "didReceiveSettings") {
+          settings = d.payload.settings || settings;
+          render();
+        }
+        if (d.event === "sendToPropertyInspector" && d.payload.settings) {
+          settings = d.payload.settings;
+          render();
+        }
+      };
+    }
+
+    document.getElementById("label").addEventListener("change", (e) => setSettings({ label: e.target.value }));
+    document.getElementById("threshold").addEventListener("change", (e) => setSettings({ thresholdPercent: parseInt(e.target.value || "0", 10) }));
+    document.getElementById("command").addEventListener("change", (e) => setSettings({ command: e.target.value }));
+    document.getElementById("autoOff").addEventListener("click", () => setSettings({ autoSend: false }));
+    document.getElementById("autoOn").addEventListener("click", () => setSettings({ autoSend: true }));
+    document.getElementById("refreshBtn").addEventListener("click", () => sendToPlugin({ type: "refresh" }));
+  </script>
+</body>
+</html>
+

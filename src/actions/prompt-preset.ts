@@ -1,5 +1,5 @@
-import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type DidReceiveSettingsEvent } from "@elgato/streamdeck";
-import { claudeController } from "../utils/claude-controller.js";
+import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent, type DidReceiveSettingsEvent } from "@elgato/streamdeck";
+import { claudeAgent } from "../agents/index.js";
 
 interface PromptPresetSettings {
   prompt?: string;
@@ -13,27 +13,28 @@ interface PromptPresetSettings {
 export class PromptPresetAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.prompt-preset";
 
-  private settings: PromptPresetSettings = {
-    prompt: "Please summarize the changes you made.",
-    label: "Summary",
-    color: "#3b82f6"
-  };
+  private settingsById = new Map<string, PromptPresetSettings>();
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.settings = (ev.payload.settings as PromptPresetSettings) || this.settings;
+    this.settingsById.set(ev.action.id, (ev.payload.settings as PromptPresetSettings) || {});
     await this.updateDisplay(ev.action);
   }
 
   override async onDidReceiveSettings(ev: DidReceiveSettingsEvent): Promise<void> {
-    this.settings = (ev.payload.settings as PromptPresetSettings) || this.settings;
+    this.settingsById.set(ev.action.id, (ev.payload.settings as PromptPresetSettings) || {});
     await this.updateDisplay(ev.action);
+  }
+
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.settingsById.delete(ev.action.id);
   }
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     try {
-      const prompt = this.settings.prompt || "Hello!";
+      const settings = this.getSettings(ev.action.id);
+      const prompt = settings.prompt || "Hello!";
       await ev.action.setTitle("...");
-      await claudeController.sendText(prompt);
+      await claudeAgent.sendText(prompt);
       await ev.action.showOk();
     } catch (error) {
       console.error("Prompt preset failed:", error);
@@ -44,13 +45,24 @@ export class PromptPresetAction extends SingletonAction {
   }
 
   private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
-    const svg = this.createPresetSvg();
+    const settings = this.getSettings(action.id);
+    const svg = this.createPresetSvg(settings);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
 
-  private createPresetSvg(): string {
-    const label = this.settings.label || "Preset";
-    const color = this.settings.color || "#3b82f6";
+  private getSettings(actionId: string): PromptPresetSettings {
+    const stored = this.settingsById.get(actionId) ?? {};
+    return {
+      prompt: "Please summarize the changes you made.",
+      label: "Summary",
+      color: "#3b82f6",
+      ...stored,
+    };
+  }
+
+  private createPresetSvg(settings: PromptPresetSettings): string {
+    const label = settings.label || "Preset";
+    const color = settings.color || "#3b82f6";
     const displayLabel = label.length > 8 ? label.slice(0, 7) + "…" : label;
 
     return `

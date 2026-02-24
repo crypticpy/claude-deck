@@ -1,4 +1,5 @@
 import resolve from "@rollup/plugin-node-resolve";
+import commonjs from "@rollup/plugin-commonjs";
 import typescript from "@rollup/plugin-typescript";
 
 const isWatching = !!process.env.ROLLUP_WATCH;
@@ -18,21 +19,24 @@ const config = {
     {
       name: "watch-externals",
       buildStart: function () {
-        this.addWatchFile(`${sdPlugin}/manifest.json`);
+        if (isWatching) {
+          this.addWatchFile(`${sdPlugin}/manifest.json`);
+        }
       },
     },
-    typescript({
-      mapRoot: isWatching
-        ? "./"
-        : undefined,
-    }),
     resolve({
       browser: false,
       exportConditions: ["node"],
       preferBuiltins: true,
     }),
+    commonjs(),
+    typescript({
+      sourceMap: isWatching,
+      inlineSources: isWatching,
+      declaration: false,
+      declarationMap: false,
+    }),
   ],
-  external: ["@anthropic-ai/claude-agent-sdk", "ws"],
 };
 
 export default config;

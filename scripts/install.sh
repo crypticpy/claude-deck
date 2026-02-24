@@ -137,11 +137,9 @@ log_success "Directories created"
 # ============================================================================
 log_step "Installing hook scripts..."
 
-cp "$PROJECT_DIR/hooks/claude-deck-hook.sh" "$HOOKS_DIR/"
 cp "$PROJECT_DIR/hooks/hook-handler.js" "$HOOKS_DIR/"
-chmod +x "$HOOKS_DIR/claude-deck-hook.sh"
 chmod +x "$HOOKS_DIR/hook-handler.js"
-log_success "Hook scripts installed to $HOOKS_DIR"
+log_success "Hook handler installed to $HOOKS_DIR"
 
 # ============================================================================
 # Create Initial State
@@ -165,6 +163,7 @@ cat > "$CLAUDE_DECK_DIR/state.json" << 'EOF'
   "lastUpdated": ""
 }
 EOF
+chmod 600 "$CLAUDE_DECK_DIR/state.json"
 log_success "State file created"
 
 # ============================================================================
@@ -215,26 +214,18 @@ log_info "Backed up existing settings"
 SETTINGS=$(cat "$SETTINGS_FILE")
 
 # Define the hooks configuration
+# Claude Code's real hook types: PreToolUse, PostToolUse, Stop, SubagentStop,
+# SessionStart, UserPromptSubmit, Notification
+# Each hook receives JSON data on stdin which hook-handler.js parses
 HOOKS_CONFIG=$(cat << EOF
 {
-  "UserPromptSubmit": [
-    {
-      "matcher": "*",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "$HOOKS_DIR/claude-deck-hook.sh prompt-submit"
-        }
-      ]
-    }
-  ],
   "PreToolUse": [
     {
       "matcher": "*",
       "hooks": [
         {
           "type": "command",
-          "command": "$HOOKS_DIR/claude-deck-hook.sh tool-use \"\$TOOL_NAME\""
+          "command": "node \"$HOOKS_DIR/hook-handler.js\" PreToolUse"
         }
       ]
     }
@@ -245,7 +236,7 @@ HOOKS_CONFIG=$(cat << EOF
       "hooks": [
         {
           "type": "command",
-          "command": "$HOOKS_DIR/claude-deck-hook.sh tool-complete"
+          "command": "node \"$HOOKS_DIR/hook-handler.js\" PostToolUse"
         }
       ]
     }
@@ -256,7 +247,51 @@ HOOKS_CONFIG=$(cat << EOF
       "hooks": [
         {
           "type": "command",
-          "command": "$HOOKS_DIR/claude-deck-hook.sh status idle"
+          "command": "node \"$HOOKS_DIR/hook-handler.js\" Stop"
+        }
+      ]
+    }
+  ],
+  "SubagentStop": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "node \"$HOOKS_DIR/hook-handler.js\" SubagentStop"
+        }
+      ]
+    }
+  ],
+  "SessionStart": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "node \"$HOOKS_DIR/hook-handler.js\" SessionStart"
+        }
+      ]
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "node \"$HOOKS_DIR/hook-handler.js\" UserPromptSubmit"
+        }
+      ]
+    }
+  ],
+  "Notification": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "node \"$HOOKS_DIR/hook-handler.js\" Notification"
         }
       ]
     }
@@ -298,11 +333,13 @@ fi
 # ============================================================================
 log_step "Testing hook installation..."
 
-"$HOOKS_DIR/claude-deck-hook.sh" session-start 2>/dev/null || true
+# Test the node hook handler with a synthetic SessionStart event on stdin
+echo '{"session_id":"install-test"}' | node "$HOOKS_DIR/hook-handler.js" SessionStart 2>/dev/null || true
 STATE=$(cat "$CLAUDE_DECK_DIR/state.json")
 if echo "$STATE" | jq -e '.sessionActive == true' > /dev/null 2>&1; then
     log_success "Hook test passed!"
-    "$HOOKS_DIR/claude-deck-hook.sh" session-stop 2>/dev/null || true
+    # Reset state after test
+    echo '{}' | node "$HOOKS_DIR/hook-handler.js" Stop 2>/dev/null || true
 else
     log_warn "Hook test inconclusive (may work when Claude is running)"
 fi

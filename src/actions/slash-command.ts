@@ -1,5 +1,5 @@
-import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type DidReceiveSettingsEvent } from "@elgato/streamdeck";
-import { claudeController } from "../utils/claude-controller.js";
+import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent, type DidReceiveSettingsEvent } from "@elgato/streamdeck";
+import { claudeAgent } from "../agents/index.js";
 
 interface SlashCommandSettings {
   command?: string;
@@ -16,29 +16,34 @@ interface SlashCommandSettings {
 export class SlashCommandAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.slash-command";
 
-  private settings: SlashCommandSettings = { command: "/help", label: "Help" };
+  private settingsById = new Map<string, SlashCommandSettings>();
 
   constructor() {
     super();
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    this.settings = (ev.payload.settings as SlashCommandSettings) || { command: "/help", label: "Help" };
+    this.settingsById.set(ev.action.id, (ev.payload.settings as SlashCommandSettings) || {});
     await this.updateDisplay(ev.action);
   }
 
   override async onDidReceiveSettings(ev: DidReceiveSettingsEvent): Promise<void> {
-    this.settings = (ev.payload.settings as SlashCommandSettings) || this.settings;
+    this.settingsById.set(ev.action.id, (ev.payload.settings as SlashCommandSettings) || {});
     await this.updateDisplay(ev.action);
+  }
+
+  override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
+    this.settingsById.delete(ev.action.id);
   }
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     try {
-      const command = this.settings.command || "/help";
+      const settings = this.getSettings(ev.action.id);
+      const command = settings.command || "/help";
       await ev.action.setTitle("...");
 
       // Send the slash command to Claude
-      const success = await claudeController.sendText(command);
+      const success = await claudeAgent.sendText(command);
 
       if (success) {
         await ev.action.showOk();
@@ -54,12 +59,18 @@ export class SlashCommandAction extends SingletonAction {
   }
 
   private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
-    const svg = this.createCommandSvg();
+    const settings = this.getSettings(action.id);
+    const svg = this.createCommandSvg(settings);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
 
-  private getCommandColor(): string {
-    const cmd = (this.settings.command || "").toLowerCase();
+  private getSettings(actionId: string): SlashCommandSettings {
+    const stored = this.settingsById.get(actionId) ?? {};
+    return { command: "/help", label: "Help", ...stored };
+  }
+
+  private getCommandColor(command: string): string {
+    const cmd = command.toLowerCase();
     if (cmd.includes("commit")) return "#f59e0b";
     if (cmd.includes("clear") || cmd.includes("compact")) return "#ef4444";
     if (cmd.includes("help") || cmd.includes("doctor")) return "#3b82f6";
@@ -68,10 +79,10 @@ export class SlashCommandAction extends SingletonAction {
     return "#64748b";
   }
 
-  private createCommandSvg(): string {
-    const command = this.settings.command || "/help";
-    const label = this.settings.label || command.replace("/", "");
-    const color = this.getCommandColor();
+  private createCommandSvg(settings: SlashCommandSettings): string {
+    const command = settings.command || "/help";
+    const label = settings.label || command.replace("/", "");
+    const color = this.getCommandColor(command);
 
     // Truncate label if too long
     const displayLabel = label.length > 8 ? label.slice(0, 7) + "…" : label;

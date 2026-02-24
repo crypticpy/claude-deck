@@ -1,9 +1,9 @@
 import { SingletonAction, type KeyDownEvent, type WillAppearEvent } from "@elgato/streamdeck";
-import { claudeController } from "../utils/claude-controller.js";
-import { exec } from "node:child_process";
+import { claudeAgent } from "../agents/index.js";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Clipboard Send Action - Sends clipboard contents to Claude
@@ -20,7 +20,7 @@ export class ClipboardSendAction extends SingletonAction {
       await ev.action.setTitle("...");
 
       // Get clipboard content on macOS
-      const { stdout } = await execAsync("pbpaste");
+      const { stdout } = await execFileAsync("pbpaste", []);
       const clipboardText = stdout.trim();
 
       if (clipboardText) {
@@ -28,7 +28,7 @@ export class ClipboardSendAction extends SingletonAction {
         const text = clipboardText.length > 500
           ? clipboardText.slice(0, 500) + "..."
           : clipboardText;
-        await claudeController.sendText(text);
+        await claudeAgent.sendText(text);
         await ev.action.showOk();
       } else {
         await ev.action.showAlert();
