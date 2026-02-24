@@ -284,7 +284,33 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
         pendingPermission: fileState.pendingPermission,
         toolUsage: fileState.toolUsage,
         hotFiles: fileState.hotFiles,
+        contextSize: fileState.contextSize,
+        contextUsed: fileState.contextUsed,
+        toolCallCount: fileState.toolCallCount,
+        lastTool: fileState.lastTool,
       };
+
+      // Staleness detection: if state claims "working"/"waiting" but no activity
+      // for 60+ seconds, verify the process is actually alive.  If the claude
+      // process is gone, reset to idle so the Stream Deck doesn't show a
+      // perpetually-stuck state.
+      if (
+        (this.currentState.status === "working" ||
+          this.currentState.status === "waiting") &&
+        this.currentState.lastActivityTime
+      ) {
+        const lastActivity = new Date(
+          this.currentState.lastActivityTime,
+        ).getTime();
+        if (Date.now() - lastActivity > 60_000) {
+          const alive = await this.isRunning();
+          if (!alive) {
+            this.currentState.status = "idle";
+            this.currentState.hasPermissionPending = false;
+            this.currentState.pendingPermission = undefined;
+          }
+        }
+      }
 
       // If session changed, reset enriched data so we don't carry stale info
       if (
@@ -323,18 +349,25 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
 
     try {
       this.stateWatcher?.close();
-      this.stateWatcher = watch(this.statePath, () => {
-        scheduleRefresh();
+      // Watch the DIRECTORY instead of the file.  The state file is written
+      // atomically via rename, which invalidates the inode that
+      // fs.watch(file) was tracking.  Watching the directory survives atomic
+      // renames because the directory inode never changes.
+      this.stateWatcher = watch(this.configDir, (_eventType, filename) => {
+        if (filename === "state.json" || filename === null) {
+          scheduleRefresh();
+        }
       });
     } catch {
       // ignore; fallback poller will handle updates
     }
 
-    // Low-frequency poller as a safety net
+    // Low-frequency poller as a safety net (1.5 s for snappier recovery when
+    // fs.watch misses an event after an atomic rename)
     if (!this.statePoller) {
       // NOTE: For non-Claude agents, polling should ideally be demand-driven
       // (only when action buttons are visible on the Stream Deck).
-      this.statePoller = setInterval(scheduleRefresh, 3000);
+      this.statePoller = setInterval(scheduleRefresh, 1500);
     }
   }
 

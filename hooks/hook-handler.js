@@ -256,8 +256,11 @@ function handleEvent(hookType, data, state) {
     }
 
     case "Stop": {
+      // Stop fires when Claude finishes its current turn, NOT when the
+      // session ends.  The user can still type another prompt, so keep
+      // sessionActive true.  sessionActive is only cleared via staleness
+      // detection on the plugin side when the claude process exits.
       state.status = "idle";
-      state.sessionActive = false;
       state.pendingPermission = null;
       state.lastActivityTime = now;
       break;

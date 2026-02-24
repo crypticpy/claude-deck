@@ -37,12 +37,24 @@ export interface AgentCapabilities {
 /**
  * Agent status
  */
-export type AgentStatus = "idle" | "working" | "waiting" | "error" | "disconnected";
+export type AgentStatus =
+  | "idle"
+  | "working"
+  | "waiting"
+  | "error"
+  | "disconnected";
 
 /**
  * Permission modes (primarily for Claude, other agents may have simpler modes)
  */
-export type PermissionMode = "default" | "plan" | "acceptEdits" | "dontAsk" | "bypassPermissions" | "yolo" | "auto";
+export type PermissionMode =
+  | "default"
+  | "plan"
+  | "acceptEdits"
+  | "dontAsk"
+  | "bypassPermissions"
+  | "yolo"
+  | "auto";
 
 /**
  * Agent state - current status and metrics
@@ -87,6 +99,14 @@ export interface AgentState {
   toolUsage?: Record<string, number>;
   /** Recently accessed files */
   hotFiles?: string[];
+  /** Total context window size in tokens */
+  contextSize?: number;
+  /** Context window tokens used */
+  contextUsed?: number;
+  /** Total tool call count */
+  toolCallCount?: number;
+  /** Most recently used tool name */
+  lastTool?: string;
 }
 
 /**
@@ -108,7 +128,13 @@ export interface SpawnOptions {
 /**
  * Supported terminal emulators
  */
-export type TerminalType = "kitty" | "ghostty" | "iterm" | "terminal" | "wezterm" | "alacritty";
+export type TerminalType =
+  | "kitty"
+  | "ghostty"
+  | "iterm"
+  | "terminal"
+  | "wezterm"
+  | "alacritty";
 
 /**
  * Agent color configuration
@@ -136,11 +162,11 @@ export const AGENT_COLORS: Record<string, AgentColor> = {
  * Status colors (universal across all agents)
  */
 export const STATUS_COLORS = {
-  idle: "#888888",
-  working: "#00FF00",
-  waiting: "#FFFF00",
-  error: "#FF3B30",
-  disconnected: "#444444",
+  idle: "#6b7280",
+  working: "#22c55e",
+  waiting: "#eab308",
+  error: "#ef4444",
+  disconnected: "#374151",
 } as const;
 
 /**

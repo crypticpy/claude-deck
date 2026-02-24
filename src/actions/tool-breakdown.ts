@@ -104,10 +104,10 @@ export class ToolBreakdownAction extends SingletonAction {
         ${paths || `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#1e293b"/>`}
         <circle cx="${cx}" cy="${cy}" r="18" fill="#0f172a"/>
         <text x="${cx}" y="${cy + 5}" font-family="system-ui" font-size="14" fill="#e2e8f0" text-anchor="middle" font-weight="bold">${toolCount}</text>
-        <text x="25" y="110" font-size="8" fill="#22c55e">Bash</text>
-        <text x="55" y="110" font-size="8" fill="#3b82f6">Read</text>
-        <text x="85" y="110" font-size="8" fill="#f59e0b">Edit</text>
-        <text x="115" y="110" font-size="8" fill="#ef4444">Write</text>
+        <text x="20" y="110" font-size="10" fill="#22c55e">Bash</text>
+        <text x="52" y="110" font-size="10" fill="#3b82f6">Read</text>
+        <text x="84" y="110" font-size="10" fill="#f59e0b">Edit</text>
+        <text x="113" y="110" font-size="10" fill="#ef4444">Write</text>
       </svg>
     `;
   }

@@ -1,4 +1,8 @@
-import { SingletonAction, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
+import {
+  SingletonAction,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+} from "@elgato/streamdeck";
 import { claudeAgent, type AgentState } from "../agents/index.js";
 
 /**
@@ -12,6 +16,7 @@ export class MatrixRainAction extends SingletonAction {
   private refreshInterval?: ReturnType<typeof setInterval>;
   private drops: number[] = [];
   private frame = 0;
+  private currentStatus: string = "disconnected";
 
   constructor() {
     super();
@@ -26,7 +31,19 @@ export class MatrixRainAction extends SingletonAction {
     await this.updateDisplay(ev.action);
 
     if (!this.updateHandler) {
-      this.updateHandler = () => {
+      this.updateHandler = (state: AgentState) => {
+        const newStatus = state.status || "disconnected";
+        const wasWorking = this.currentStatus === "working";
+        const isWorking = newStatus === "working";
+        this.currentStatus = newStatus;
+
+        // Start/stop fast timer based on status transitions
+        if (isWorking && !wasWorking) {
+          this.startFastTimer();
+        } else if (!isWorking && wasWorking) {
+          this.stopFastTimer();
+        }
+
         void this.updateAll().catch(() => {
           // ignore
         });
@@ -34,19 +51,10 @@ export class MatrixRainAction extends SingletonAction {
       claudeAgent.on("stateChange", this.updateHandler);
     }
 
-    // Fast animation for matrix effect
-    if (!this.refreshInterval) {
-      this.refreshInterval = setInterval(() => {
-        if (this.activeActions.size === 0) return;
-        this.frame++;
-        for (let i = 0; i < this.drops.length; i++) {
-          this.drops[i] += 8 + Math.random() * 4;
-          if (this.drops[i] > 144) this.drops[i] = -20;
-        }
-        void this.updateAll().catch(() => {
-          // ignore
-        });
-      }, 100);
+    // Only start fast timer if currently working
+    this.currentStatus = claudeAgent.getState().status || "disconnected";
+    if (this.currentStatus === "working") {
+      this.startFastTimer();
     }
   }
 
@@ -56,7 +64,28 @@ export class MatrixRainAction extends SingletonAction {
       claudeAgent.off("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
-    if (this.activeActions.size === 0 && this.refreshInterval) {
+    if (this.activeActions.size === 0) {
+      this.stopFastTimer();
+    }
+  }
+
+  private startFastTimer(): void {
+    if (this.refreshInterval) return;
+    this.refreshInterval = setInterval(() => {
+      if (this.activeActions.size === 0) return;
+      this.frame++;
+      for (let i = 0; i < this.drops.length; i++) {
+        this.drops[i] += 8 + Math.random() * 4;
+        if (this.drops[i] > 144) this.drops[i] = -20;
+      }
+      void this.updateAll().catch(() => {
+        // ignore
+      });
+    }, 100);
+  }
+
+  private stopFastTimer(): void {
+    if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
       this.refreshInterval = undefined;
     }
@@ -64,10 +93,16 @@ export class MatrixRainAction extends SingletonAction {
 
   private async updateAll(): Promise<void> {
     if (this.activeActions.size === 0) return;
-    await Promise.allSettled([...this.activeActions.values()].map((action) => this.updateDisplay(action)));
+    await Promise.allSettled(
+      [...this.activeActions.values()].map((action) =>
+        this.updateDisplay(action),
+      ),
+    );
   }
 
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
     const state = claudeAgent.getState();
     const svg = this.createMatrixSvg(state);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
@@ -75,7 +110,8 @@ export class MatrixRainAction extends SingletonAction {
 
   private createMatrixSvg(state: AgentState): string {
     const isWorking = state.status === "working";
-    const chars = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン01";
+    const chars =
+      "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン01";
 
     let rainDrops = "";
 
@@ -84,7 +120,7 @@ export class MatrixRainAction extends SingletonAction {
         const x = 12 + i * 10;
         const y = this.drops[i];
         const char = chars[Math.floor(Math.random() * chars.length)];
-        const opacity = Math.max(0, 1 - (y / 144));
+        const opacity = Math.max(0, 1 - y / 144);
 
         // Trail effect
         for (let j = 0; j < 5; j++) {
