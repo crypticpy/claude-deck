@@ -35,7 +35,6 @@ const STATE_DIR = path.join(os.homedir(), ".claude-deck");
 const STATE_FILE = path.join(STATE_DIR, "state.json");
 const SESSIONS_DIR = path.join(STATE_DIR, "sessions");
 const STATE_PERMS = 0o600;
-const LOCK_FILE = STATE_FILE + ".lock";
 const LOCK_TIMEOUT_MS = 2000;
 
 function isProcessAlive(pid) {
@@ -47,18 +46,18 @@ function isProcessAlive(pid) {
   }
 }
 
-function acquireLock() {
+function acquireSessionLock() {
+  const lockFile = getSessionFile() + ".lock";
   const start = Date.now();
   while (Date.now() - start < LOCK_TIMEOUT_MS) {
     try {
-      fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: "wx" });
+      fs.writeFileSync(lockFile, String(process.pid), { flag: "wx" });
       return true;
     } catch {
-      // Check for stale lock
       try {
-        const lockPid = parseInt(fs.readFileSync(LOCK_FILE, "utf-8"), 10);
+        const lockPid = parseInt(fs.readFileSync(lockFile, "utf-8"), 10);
         if (lockPid && !isProcessAlive(lockPid)) {
-          fs.unlinkSync(LOCK_FILE);
+          fs.unlinkSync(lockFile);
           continue;
         }
       } catch {
@@ -73,9 +72,9 @@ function acquireLock() {
   return false;
 }
 
-function releaseLock() {
+function releaseSessionLock() {
   try {
-    fs.unlinkSync(LOCK_FILE);
+    fs.unlinkSync(getSessionFile() + ".lock");
   } catch {
     /* ignore */
   }
@@ -110,22 +109,6 @@ const DEFAULT_STATE = {
   lastActivityTime: null,
   lastUpdated: new Date().toISOString(),
 };
-
-/**
- * Read state from disk, merging with defaults for any missing keys.
- */
-function readState() {
-  try {
-    if (fs.existsSync(STATE_FILE)) {
-      const content = fs.readFileSync(STATE_FILE, "utf-8");
-      return { ...DEFAULT_STATE, ...JSON.parse(content) };
-    }
-  } catch (e) {
-    // If state file is corrupt, start fresh
-    process.stderr.write(`[claude-deck] Error reading state: ${e.message}\n`);
-  }
-  return { ...DEFAULT_STATE };
-}
 
 /**
  * Write state atomically: write to a .tmp file, then rename.
@@ -367,7 +350,12 @@ async function main() {
     const data = parseInput(raw);
 
     // Read per-session state, apply event, write back (with file locking)
-    const locked = acquireLock();
+    const locked = acquireSessionLock();
+    if (!locked) {
+      process.stderr.write(
+        "[claude-deck] Warning: could not acquire session lock, proceeding without lock\n",
+      );
+    }
     try {
       const state = readSessionState();
       handleEvent(hookType, data, state);
@@ -375,7 +363,7 @@ async function main() {
       // Also write to state.json as the "active" session for backward compat
       writeState(state);
     } finally {
-      if (locked) releaseLock();
+      if (locked) releaseSessionLock();
     }
 
     // For PreToolUse, Claude Code expects valid JSON on stdout.

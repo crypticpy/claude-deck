@@ -320,7 +320,10 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
           this.currentState.lastActivityTime,
         ).getTime();
         if (Date.now() - lastActivity > 60_000) {
-          const alive = await this.isRunning();
+          const pid = fileState.claudePid;
+          const alive = pid
+            ? await this.isProcessAlive(pid)
+            : await this.isRunning();
           if (!alive) {
             this.currentState.status = "idle";
             this.currentState.hasPermissionPending = false;
@@ -467,34 +470,68 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
   // ============================================
 
   /**
-   * Find the most recently updated session file in the sessions directory.
+   * Find the most recently updated session file in the sessions directory,
+   * preferring files whose claude process is still alive.
    * Falls back to the global state.json if no session files exist.
    */
   private async findActiveSessionFile(): Promise<string> {
     try {
       const files = await readdir(this.sessionsDir);
-      const jsonFiles = files.filter((f) => f.endsWith(".json"));
+      const jsonFiles = files.filter(
+        (f) => f.endsWith(".json") && !f.endsWith(".lock"),
+      );
       if (jsonFiles.length === 0) return this.statePath;
 
-      let newestFile = this.statePath;
-      let newestMtime = 0;
-
+      // Sort by mtime descending (newest first)
+      const fileInfos: { path: string; mtime: number }[] = [];
       for (const f of jsonFiles) {
         const fullPath = join(this.sessionsDir, f);
         try {
           const s = await stat(fullPath);
-          if (s.mtimeMs > newestMtime) {
-            newestMtime = s.mtimeMs;
-            newestFile = fullPath;
-          }
+          fileInfos.push({ path: fullPath, mtime: s.mtimeMs });
         } catch {
           /* skip */
         }
       }
+      fileInfos.sort((a, b) => b.mtime - a.mtime);
 
-      return newestFile;
+      // Prefer the newest session file whose process is still alive
+      for (const info of fileInfos) {
+        try {
+          const content = await readFile(info.path, "utf-8");
+          const parsed = JSON.parse(content);
+          const pid = parsed.claudePid;
+          if (pid) {
+            try {
+              process.kill(pid, 0);
+              return info.path; // Process alive, use this session
+            } catch {
+              continue; // Process dead, try next
+            }
+          }
+        } catch {
+          /* skip unreadable files */
+        }
+      }
+
+      // No alive sessions found -- fall back to newest file anyway
+      // (cleanupStaleSessions will remove dead ones eventually)
+      if (fileInfos.length > 0) return fileInfos[0].path;
+      return this.statePath;
     } catch {
       return this.statePath;
+    }
+  }
+
+  /**
+   * Check if a specific process is alive by PID.
+   */
+  private async isProcessAlive(pid: number): Promise<boolean> {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -505,7 +542,7 @@ export class ClaudeAgentAdapter extends BaseAgentAdapter {
     try {
       const files = await readdir(this.sessionsDir);
       for (const f of files) {
-        if (!f.endsWith(".json")) continue;
+        if (!f.endsWith(".json") || f.endsWith(".lock")) continue;
         const pid = parseInt(f.replace(".json", ""), 10);
         if (isNaN(pid)) continue;
         try {

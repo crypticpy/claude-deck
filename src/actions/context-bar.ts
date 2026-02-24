@@ -3,7 +3,11 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
 
 /**
  * Context Bar Action - Shows context window usage as a visual progress bar
@@ -11,7 +15,7 @@ import { claudeAgent, type AgentState } from "../agents/index.js";
 export class ContextBarAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.context-bar";
 
-  private updateHandler?: (state: AgentState) => void;
+  private stateHandler?: (state: AggregatedState) => void;
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   constructor() {
     super();
@@ -21,22 +25,30 @@ export class ContextBarAction extends SingletonAction {
     this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
 
-    if (!this.updateHandler) {
-      this.updateHandler = () => {
+    if (!this.stateHandler) {
+      this.stateHandler = () => {
         void this.updateAll().catch(() => {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.stateHandler);
     }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
-    if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
-      this.updateHandler = undefined;
+    if (this.activeActions.size === 0 && this.stateHandler) {
+      stateAggregator.removeListener("stateChange", this.stateHandler);
+      this.stateHandler = undefined;
     }
+  }
+
+  private getActiveAgentState(): AgentState | undefined {
+    const activeId = stateAggregator.getActiveAgentId();
+    if (activeId) {
+      return stateAggregator.getAgentState(activeId);
+    }
+    return undefined;
   }
 
   private async updateAll(): Promise<void> {
@@ -51,7 +63,7 @@ export class ContextBarAction extends SingletonAction {
   private async updateDisplay(
     action: WillAppearEvent["action"],
   ): Promise<void> {
-    const state = claudeAgent.getState();
+    const state = this.getActiveAgentState();
     const svg = this.createBarSvg(state);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
@@ -63,8 +75,8 @@ export class ContextBarAction extends SingletonAction {
     return "#ef4444"; // Red
   }
 
-  private createBarSvg(state: AgentState): string {
-    const percent = Math.min(100, Math.round(state.contextPercent ?? 0));
+  private createBarSvg(state: AgentState | undefined): string {
+    const percent = Math.min(100, Math.round(state?.contextPercent ?? 0));
     const contextSize = 200000; // Default context window
     const used = Math.round((percent / 100) * contextSize);
     const total = contextSize;

@@ -93,7 +93,7 @@ export class ActivityDisplayAction extends SingletonAction {
 
     return `
       <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
-        <rect width="144" height="144" fill="#111827" rx="12"/>
+        <rect width="144" height="144" fill="#0f172a" rx="12"/>
 
         <!-- Status indicator with pulse -->
         <g>

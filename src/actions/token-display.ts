@@ -3,7 +3,11 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent } from "../agents/index.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
 
 /**
  * Token Display Action - Shows current token usage on the button
@@ -18,7 +22,7 @@ export class TokenDisplayAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.token-display";
 
   private activeActions = new Map<string, WillAppearEvent["action"]>();
-  private updateHandler?: () => void;
+  private stateHandler?: (state: AggregatedState) => void;
   constructor() {
     super();
   }
@@ -27,23 +31,31 @@ export class TokenDisplayAction extends SingletonAction {
     this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
 
-    if (!this.updateHandler) {
-      this.updateHandler = () => {
+    if (!this.stateHandler) {
+      this.stateHandler = () => {
         void this.updateAll().catch(() => {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.stateHandler);
     }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
 
-    if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
-      this.updateHandler = undefined;
+    if (this.activeActions.size === 0 && this.stateHandler) {
+      stateAggregator.removeListener("stateChange", this.stateHandler);
+      this.stateHandler = undefined;
     }
+  }
+
+  private getActiveAgentState(): AgentState | undefined {
+    const activeId = stateAggregator.getActiveAgentId();
+    if (activeId) {
+      return stateAggregator.getAgentState(activeId);
+    }
+    return undefined;
   }
 
   private async updateAll(): Promise<void> {
@@ -58,8 +70,8 @@ export class TokenDisplayAction extends SingletonAction {
   private async updateDisplay(
     action: WillAppearEvent["action"],
   ): Promise<void> {
-    const state = claudeAgent.getState();
-    const tokens = state.tokens || { input: 0, output: 0 };
+    const state = this.getActiveAgentState();
+    const tokens = state?.tokens || { input: 0, output: 0 };
     const total = tokens.input + tokens.output;
 
     // Format token count (e.g., 12.5K)
@@ -82,7 +94,7 @@ export class TokenDisplayAction extends SingletonAction {
   private createTokenSvg(input: string, output: string, total: string): string {
     return `
       <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
-        <rect width="144" height="144" fill="#1a1a2e" rx="12"/>
+        <rect width="144" height="144" fill="#0f172a" rx="12"/>
 
         <!-- Title -->
         <text x="72" y="28" font-family="system-ui, sans-serif" font-size="14" fill="#888" text-anchor="middle">TOKENS</text>

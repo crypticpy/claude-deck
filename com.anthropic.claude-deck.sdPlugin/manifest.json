@@ -69,7 +69,8 @@
           "TitleColor": "#FFFFFF",
           "FontSize": "12"
         }
-      ]
+      ],
+      "PropertyInspectorPath": "ui/target-agent-pi.html"
     },
     {
       "UUID": "com.anthropic.claude-deck.reject",
@@ -84,7 +85,8 @@
           "TitleColor": "#FFFFFF",
           "FontSize": "12"
         }
-      ]
+      ],
+      "PropertyInspectorPath": "ui/target-agent-pi.html"
     },
     {
       "UUID": "com.anthropic.claude-deck.interrupt",
@@ -99,7 +101,8 @@
           "TitleColor": "#FFFFFF",
           "FontSize": "12"
         }
-      ]
+      ],
+      "PropertyInspectorPath": "ui/target-agent-pi.html"
     },
     {
       "UUID": "com.anthropic.claude-deck.yolo-mode",
@@ -353,7 +356,8 @@
           "TitleColor": "#FFFFFF",
           "FontSize": "10"
         }
-      ]
+      ],
+      "PropertyInspectorPath": "ui/cost-budget-pi.html"
     },
     {
       "UUID": "com.anthropic.claude-deck.context-bar",

@@ -5,9 +5,9 @@ import {
   type KeyDownEvent,
 } from "@elgato/streamdeck";
 import {
-  claudeAgent,
   stateAggregator,
   type AgentState,
+  type AggregatedState,
 } from "../agents/index.js";
 
 /**
@@ -22,7 +22,7 @@ import {
 export class ModeDisplayAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.mode-display";
 
-  private updateHandler?: (state: AgentState) => void;
+  private stateHandler?: (state: AggregatedState) => void;
   private activeActions = new Map<string, WillAppearEvent["action"]>();
 
   constructor() {
@@ -32,24 +32,24 @@ export class ModeDisplayAction extends SingletonAction {
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
 
-    const state = claudeAgent.getState();
-    await this.updateDisplay(ev.action, state);
+    const agentState = this.getActiveAgentState();
+    await this.updateDisplay(ev.action, agentState);
 
-    if (!this.updateHandler) {
-      this.updateHandler = (newState: AgentState) => {
-        void this.updateAllWithState(newState).catch(() => {
+    if (!this.stateHandler) {
+      this.stateHandler = () => {
+        void this.updateAllDisplays().catch(() => {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.stateHandler);
     }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
-    if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
-      this.updateHandler = undefined;
+    if (this.activeActions.size === 0 && this.stateHandler) {
+      stateAggregator.removeListener("stateChange", this.stateHandler);
+      this.stateHandler = undefined;
     }
   }
 
@@ -67,20 +67,29 @@ export class ModeDisplayAction extends SingletonAction {
     }
   }
 
+  private getActiveAgentState(): AgentState | undefined {
+    const activeId = stateAggregator.getActiveAgentId();
+    if (activeId) {
+      return stateAggregator.getAgentState(activeId);
+    }
+    return undefined;
+  }
+
   private async updateDisplay(
     action: WillAppearEvent["action"],
-    state: AgentState,
+    state: AgentState | undefined,
   ): Promise<void> {
-    const mode = state.mode || "default";
+    const mode = state?.mode || "default";
     const svg = this.createModeSvg(mode);
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }
 
-  private async updateAllWithState(state: AgentState): Promise<void> {
+  private async updateAllDisplays(): Promise<void> {
     if (this.activeActions.size === 0) return;
+    const agentState = this.getActiveAgentState();
     await Promise.allSettled(
       [...this.activeActions.values()].map((action) =>
-        this.updateDisplay(action, state),
+        this.updateDisplay(action, agentState),
       ),
     );
   }

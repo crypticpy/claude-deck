@@ -3,7 +3,11 @@ import {
   type WillAppearEvent,
   type WillDisappearEvent,
 } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
+import {
+  stateAggregator,
+  type AgentState,
+  type AggregatedState,
+} from "../agents/index.js";
 
 /**
  * Status Action - Displays current Claude Code session status
@@ -11,7 +15,7 @@ import { claudeAgent, type AgentState } from "../agents/index.js";
 export class StatusAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.status";
 
-  private updateHandler?: (state: AgentState) => void;
+  private stateHandler?: (state: AggregatedState) => void;
   private activeActions = new Map<string, WillAppearEvent["action"]>();
 
   constructor() {
@@ -22,57 +26,67 @@ export class StatusAction extends SingletonAction {
     this.activeActions.set(ev.action.id, ev.action);
 
     // Set initial state
-    const state = claudeAgent.getState();
+    const state = this.getActiveAgentState();
     await this.updateDisplay(ev.action, state);
 
     // Subscribe to state changes
-    if (!this.updateHandler) {
-      this.updateHandler = (newState: AgentState) => {
-        void this.updateAllWithState(newState).catch(() => {
+    if (!this.stateHandler) {
+      this.stateHandler = () => {
+        void this.updateAllDisplays().catch(() => {
           // ignore
         });
       };
-      claudeAgent.on("stateChange", this.updateHandler);
+      stateAggregator.on("stateChange", this.stateHandler);
     }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
-    if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
-      this.updateHandler = undefined;
+    if (this.activeActions.size === 0 && this.stateHandler) {
+      stateAggregator.removeListener("stateChange", this.stateHandler);
+      this.stateHandler = undefined;
     }
+  }
+
+  private getActiveAgentState(): AgentState | undefined {
+    const activeId = stateAggregator.getActiveAgentId();
+    if (activeId) {
+      return stateAggregator.getAgentState(activeId);
+    }
+    return undefined;
   }
 
   private async updateDisplay(
     action: WillAppearEvent["action"],
-    state: AgentState,
+    state: AgentState | undefined,
   ): Promise<void> {
+    const status = state?.status ?? "disconnected";
+
     // Map status to state index
-    const stateIndex =
-      state.status === "working" ? 1 : state.status === "waiting" ? 2 : 0;
+    const stateIndex = status === "working" ? 1 : status === "waiting" ? 2 : 0;
     if ("setState" in action) {
       await action.setState(stateIndex);
     }
 
     // Update title based on status
     let title = "Idle";
-    if (state.status === "working") {
+    if (status === "working") {
       title = "Working";
-    } else if (state.status === "waiting") {
-      title = state.pendingPermission?.tool || "Waiting";
-    } else if (state.status === "disconnected") {
+    } else if (status === "waiting") {
+      title = state?.pendingPermission?.tool || "Waiting";
+    } else if (status === "disconnected") {
       title = "No Session";
     }
 
     await action.setTitle(title);
   }
 
-  private async updateAllWithState(state: AgentState): Promise<void> {
+  private async updateAllDisplays(): Promise<void> {
     if (this.activeActions.size === 0) return;
+    const agentState = this.getActiveAgentState();
     await Promise.allSettled(
       [...this.activeActions.values()].map((action) =>
-        this.updateDisplay(action, state),
+        this.updateDisplay(action, agentState),
       ),
     );
   }

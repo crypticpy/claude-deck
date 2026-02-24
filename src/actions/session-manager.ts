@@ -77,7 +77,7 @@ export class SessionManagerAction extends SingletonAction {
 
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   private settingsById = new Map<string, SessionManagerSettings>();
-  private sessionsDir = join(homedir(), ".claude-deck", "sessions");
+  private sessionsDir = join(homedir(), ".claude-deck", "profiles");
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
