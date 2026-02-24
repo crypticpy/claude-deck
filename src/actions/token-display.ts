@@ -19,8 +19,6 @@ export class TokenDisplayAction extends SingletonAction {
 
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   private updateHandler?: () => void;
-  private refreshInterval?: ReturnType<typeof setInterval>;
-
   constructor() {
     super();
   }
@@ -37,15 +35,6 @@ export class TokenDisplayAction extends SingletonAction {
       };
       claudeAgent.on("stateChange", this.updateHandler);
     }
-
-    // Also poll every 2 seconds for token updates
-    if (!this.refreshInterval) {
-      this.refreshInterval = setInterval(() => {
-        void this.updateAll().catch(() => {
-          // ignore
-        });
-      }, 2000);
-    }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
@@ -54,10 +43,6 @@ export class TokenDisplayAction extends SingletonAction {
     if (this.activeActions.size === 0 && this.updateHandler) {
       claudeAgent.off("stateChange", this.updateHandler);
       this.updateHandler = undefined;
-    }
-    if (this.activeActions.size === 0 && this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-      this.refreshInterval = undefined;
     }
   }
 

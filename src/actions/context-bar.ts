@@ -13,8 +13,6 @@ export class ContextBarAction extends SingletonAction {
 
   private updateHandler?: (state: AgentState) => void;
   private activeActions = new Map<string, WillAppearEvent["action"]>();
-  private refreshInterval?: ReturnType<typeof setInterval>;
-
   constructor() {
     super();
   }
@@ -31,14 +29,6 @@ export class ContextBarAction extends SingletonAction {
       };
       claudeAgent.on("stateChange", this.updateHandler);
     }
-
-    if (!this.refreshInterval) {
-      this.refreshInterval = setInterval(() => {
-        void this.updateAll().catch(() => {
-          // ignore
-        });
-      }, 2000);
-    }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
@@ -46,10 +36,6 @@ export class ContextBarAction extends SingletonAction {
     if (this.activeActions.size === 0 && this.updateHandler) {
       claudeAgent.off("stateChange", this.updateHandler);
       this.updateHandler = undefined;
-    }
-    if (this.activeActions.size === 0 && this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-      this.refreshInterval = undefined;
     }
   }
 

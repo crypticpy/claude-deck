@@ -145,21 +145,56 @@ export class TerminalDetector extends EventEmitter {
   }
 
   /**
+   * Get the frontmost application name AND window title in a single AppleScript call.
+   * Returns both app name and window title, or null if not available.
+   */
+  async getFrontmostAppInfo(): Promise<{
+    appName: string;
+    windowTitle: string;
+  } | null> {
+    if (!isMacOS) return null;
+    try {
+      const script = `
+        tell application "System Events"
+          set frontProc to first application process whose frontmost is true
+          set appName to name of frontProc
+          try
+            set winTitle to name of front window of frontProc
+          on error
+            set winTitle to ""
+          end try
+          return appName & "|||" & winTitle
+        end tell
+      `;
+      const { stdout } = await execFileAsync("osascript", ["-e", script]);
+      const result = stdout.trim();
+      if (!result) return null;
+      const sepIndex = result.indexOf("|||");
+      if (sepIndex === -1) return { appName: result, windowTitle: "" };
+      return {
+        appName: result.substring(0, sepIndex),
+        windowTitle: result.substring(sepIndex + 3),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Get the focused terminal info
    */
   async getFocusedTerminal(): Promise<TerminalWindow | null> {
-    const appName = await this.getFrontmostAppName();
-    if (!appName) return null;
+    const info = await this.getFrontmostAppInfo();
+    if (!info) return null;
 
-    const terminalType = TERMINAL_APPS[appName];
+    const terminalType = TERMINAL_APPS[info.appName];
     if (!terminalType) return null;
 
-    const title = (await this.getFrontmostWindowTitle()) ?? "";
-    const agentId = await this.detectAgentFromTitle(title);
+    const agentId = await this.detectAgentFromTitle(info.windowTitle);
 
     return {
       pid: 0, // PID detection is more complex; not needed for basic focus tracking
-      title,
+      title: info.windowTitle,
       app: terminalType,
       agentId: agentId ?? undefined,
       focused: true,
@@ -230,7 +265,7 @@ export class TerminalDetector extends EventEmitter {
    * Start watching for focus changes
    * Emits 'focusChange' events when the focused terminal/agent changes
    */
-  startWatching(intervalMs = 2000): void {
+  startWatching(intervalMs = 750): void {
     this.stopWatching();
 
     this.pollInterval = setInterval(async () => {

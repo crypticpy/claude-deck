@@ -19,8 +19,6 @@ export class ActivityDisplayAction extends SingletonAction {
 
   private updateHandler?: (state: AgentState) => void;
   private activeActions = new Map<string, WillAppearEvent["action"]>();
-  private refreshInterval?: ReturnType<typeof setInterval>;
-
   constructor() {
     super();
   }
@@ -39,15 +37,6 @@ export class ActivityDisplayAction extends SingletonAction {
       };
       claudeAgent.on("stateChange", this.updateHandler);
     }
-
-    // Refresh every second for live feel
-    if (!this.refreshInterval) {
-      this.refreshInterval = setInterval(() => {
-        void this.refreshAll().catch(() => {
-          // ignore
-        });
-      }, 3000);
-    }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
@@ -57,16 +46,6 @@ export class ActivityDisplayAction extends SingletonAction {
       claudeAgent.off("stateChange", this.updateHandler);
       this.updateHandler = undefined;
     }
-    if (this.activeActions.size === 0 && this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-      this.refreshInterval = undefined;
-    }
-  }
-
-  private async refreshAll(): Promise<void> {
-    if (this.activeActions.size === 0) return;
-    const state = await claudeAgent.refreshState();
-    await this.updateAllWithState(state);
   }
 
   private async updateAllWithState(state: AgentState): Promise<void> {

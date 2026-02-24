@@ -13,8 +13,6 @@ export class ToolBreakdownAction extends SingletonAction {
 
   private activeActions = new Map<string, WillAppearEvent["action"]>();
   private updateHandler?: (state: AgentState) => void;
-  private refreshInterval?: ReturnType<typeof setInterval>;
-
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
@@ -27,14 +25,6 @@ export class ToolBreakdownAction extends SingletonAction {
       };
       claudeAgent.on("stateChange", this.updateHandler);
     }
-
-    if (!this.refreshInterval) {
-      this.refreshInterval = setInterval(() => {
-        void this.updateAll().catch(() => {
-          // ignore
-        });
-      }, 3000);
-    }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
@@ -42,10 +32,6 @@ export class ToolBreakdownAction extends SingletonAction {
     if (this.activeActions.size === 0 && this.updateHandler) {
       claudeAgent.off("stateChange", this.updateHandler);
       this.updateHandler = undefined;
-    }
-    if (this.activeActions.size === 0 && this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-      this.refreshInterval = undefined;
     }
   }
 

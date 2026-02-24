@@ -1,5 +1,10 @@
-import { SingletonAction, type KeyDownEvent, type WillAppearEvent, type WillDisappearEvent } from "@elgato/streamdeck";
-import { claudeAgent, type AgentState } from "../agents/index.js";
+import {
+  SingletonAction,
+  type KeyDownEvent,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+} from "@elgato/streamdeck";
+import { claudeAgent } from "../agents/index.js";
 
 /**
  * Brain Search Action - Searches context-layer brain for lessons and insights
@@ -10,9 +15,7 @@ import { claudeAgent, type AgentState } from "../agents/index.js";
 export class BrainSearchAction extends SingletonAction {
   manifestId = "com.anthropic.claude-deck.brain-search";
 
-  private updateHandler?: (state: AgentState) => void;
   private activeActions = new Map<string, WillAppearEvent["action"]>();
-  private refreshInterval?: ReturnType<typeof setInterval>;
 
   constructor() {
     super();
@@ -21,35 +24,10 @@ export class BrainSearchAction extends SingletonAction {
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
     this.activeActions.set(ev.action.id, ev.action);
     await this.updateDisplay(ev.action);
-
-    if (!this.updateHandler) {
-      this.updateHandler = () => {
-        void this.updateAll().catch(() => {
-          // ignore
-        });
-      };
-      claudeAgent.on("stateChange", this.updateHandler);
-    }
-
-    if (!this.refreshInterval) {
-      this.refreshInterval = setInterval(() => {
-        void this.updateAll().catch(() => {
-          // ignore
-        });
-      }, 5000);
-    }
   }
 
   override async onWillDisappear(ev: WillDisappearEvent): Promise<void> {
     this.activeActions.delete(ev.action.id);
-    if (this.activeActions.size === 0 && this.updateHandler) {
-      claudeAgent.off("stateChange", this.updateHandler);
-      this.updateHandler = undefined;
-    }
-    if (this.activeActions.size === 0 && this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-      this.refreshInterval = undefined;
-    }
   }
 
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
@@ -57,7 +35,9 @@ export class BrainSearchAction extends SingletonAction {
       await ev.action.setTitle("...");
 
       // Send brain search command to Claude
-      await claudeAgent.sendText("Search my brain for recent lessons and hot files");
+      await claudeAgent.sendText(
+        "Search my brain for recent lessons and hot files",
+      );
 
       await ev.action.showOk();
     } catch (error) {
@@ -66,12 +46,9 @@ export class BrainSearchAction extends SingletonAction {
     }
   }
 
-  private async updateAll(): Promise<void> {
-    if (this.activeActions.size === 0) return;
-    await Promise.allSettled([...this.activeActions.values()].map((action) => this.updateDisplay(action)));
-  }
-
-  private async updateDisplay(action: WillAppearEvent["action"]): Promise<void> {
+  private async updateDisplay(
+    action: WillAppearEvent["action"],
+  ): Promise<void> {
     const svg = this.createBrainSvg();
     await action.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
   }

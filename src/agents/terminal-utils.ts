@@ -112,7 +112,6 @@ export async function sendKeystroke(
 ): Promise<boolean> {
   try {
     if (!isMacOS) return false;
-    const appName = TERMINAL_APP_NAMES[terminalType];
     const processName = TERMINAL_PROCESS_NAMES[terminalType];
 
     const keyCode = KEY_CODES[key.toLowerCase()];
@@ -128,19 +127,20 @@ export async function sendKeystroke(
 
     const script = `
       on run argv
-        set appName to item 1 of argv
-        set processName to item 2 of argv
-        tell application appName to activate
-        delay 0.1
+        set processName to item 1 of argv
         tell application "System Events"
-          tell process processName
-            ${keyPress}
-          end tell
+          if exists process processName then
+            set frontmost of process processName to true
+            delay 0.05
+            tell process processName
+              ${keyPress}
+            end tell
+          end if
         end tell
       end run
     `;
 
-    await runOsascript(script, [appName, processName]);
+    await runOsascript(script, [processName]);
     return true;
   } catch (error) {
     console.error("Failed to send keystroke:", error);
@@ -157,23 +157,25 @@ export async function sendText(
 ): Promise<boolean> {
   try {
     if (!isMacOS) return false;
-    const appName = TERMINAL_APP_NAMES[terminalType];
+    const processName = TERMINAL_PROCESS_NAMES[terminalType];
 
     const script = `
       on run argv
-        set appName to item 1 of argv
+        set processName to item 1 of argv
         set textToType to item 2 of argv
-        tell application appName to activate
-        delay 0.1
         tell application "System Events"
-          keystroke textToType
-          delay 0.1
-          keystroke return
+          if exists process processName then
+            set frontmost of process processName to true
+            delay 0.05
+            keystroke textToType
+            delay 0.05
+            keystroke return
+          end if
         end tell
       end run
     `;
 
-    await runOsascript(script, [appName, text]);
+    await runOsascript(script, [processName, text]);
     return true;
   } catch (error) {
     console.error("Failed to send text:", error);
